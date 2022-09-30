@@ -14,6 +14,7 @@
 // limitations under the License.
 
 #![allow(dead_code)] // orchestra events are not used
+#![allow(clippy::all)]
 
 //! A minimal demo to be used with cargo expand.
 
