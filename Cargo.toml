@@ -1,0 +1,2 @@
+[workspace]
+members = ["orchestra", "metered-channel", "orchestra/proc-macro"]
