@@ -1,6 +1,6 @@
 [package]
 name = "orchestra"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Generate an orchestra of subsystems from a single struct."
@@ -14,7 +14,7 @@ futures = "0.3"
 async-trait = "0.1"
 thiserror = "1"
 metered = { package = "prioritized-metered-channel", version = "0.2.0", path = "../metered-channel" }
-orchestra-proc-macro = { version = "0.0.1", path = "./proc-macro" }
+orchestra-proc-macro = { version = "0.0.2", path = "./proc-macro" }
 futures-timer = "3.0.2"
 pin-project = "1.0"
 dyn-clonable = "0.9"

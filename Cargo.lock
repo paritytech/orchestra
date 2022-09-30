@@ -419,7 +419,7 @@ checksum = "e82dad04139b71a90c080c8463fe0dc7902db5192d939bd0950f074d014339e1"
 
 [[package]]
 name = "orchestra"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "async-trait",
  "dyn-clonable",
@@ -436,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "orchestra-proc-macro"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "assert_matches",
  "expander",

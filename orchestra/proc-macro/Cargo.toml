@@ -1,6 +1,6 @@
 [package]
 name = "orchestra-proc-macro"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Generate an orchestra of subsystems from a single annotated struct definition."
