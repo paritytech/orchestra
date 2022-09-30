@@ -97,3 +97,12 @@ Licensed under either of
 * MIT license (LICENSE-MIT or <http://opensource.org/licenses/MIT>)
 
 at your option.
+
+# prioritized-metered-channel
+
+Implements a metered variant of `mpsc` channels that provide an interface to extract metrics. 
+The following metrics are available:
+- The amount of messages sent on a channel, in aggregate.
+- The amount of messages received on a channel, in aggregate.
+- How many times the caller blocked when sending messages on a channel.
+- Time of flight in micro seconds (us)
