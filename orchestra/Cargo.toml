@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Generate an orchestra of subsystems from a single struct."
-repository = "https://github.com/paritytech/polkadot"
+repository = "https://github.com/paritytech/orchestra"
 license = "MIT OR Apache-2.0"
 autoexamples = false
 

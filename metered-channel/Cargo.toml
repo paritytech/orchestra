@@ -4,7 +4,7 @@ version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Channels with built-in observability and message priorizitazion (coming soon™)"
-repository = "https://github.com/paritytech/polkadot.git"
+repository = "https://github.com/paritytech/orchestra.git"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
