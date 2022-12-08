@@ -114,6 +114,9 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 	for ssf in info.subsystems() {
 		let subsystem_name = ssf.generic.to_string();
 		let outgoing_wrapper = &Ident::new(&(subsystem_name.clone() + "OutgoingMessages"), span);
+		let message_to_consume = ssf.message_to_consume();
+
+		ts.extend(ssf.maybe_dummy_message_tokenstream());
 
 		let subsystem_ctx_trait = &Ident::new(&(subsystem_name.clone() + "ContextTrait"), span);
 		let subsystem_sender_trait = &Ident::new(&(subsystem_name.clone() + "SenderTrait"), span);
@@ -124,12 +127,12 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 			subsystem_ctx_trait,
 			subsystem_sender_name,
 			subsystem_sender_trait,
-			&ssf.message_to_consume,
+			&message_to_consume,
 			&ssf.messages_to_send,
 			outgoing_wrapper,
 		));
 
-		ts.extend(impl_associate_outgoing_messages(&ssf.message_to_consume, &outgoing_wrapper));
+		ts.extend(impl_associate_outgoing_messages(&message_to_consume, &outgoing_wrapper));
 
 		ts.extend(impl_wrapper_enum(&outgoing_wrapper, ssf.messages_to_send.as_slice())?);
 	}

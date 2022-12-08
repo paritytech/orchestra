@@ -89,8 +89,9 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 	let outgoing = HashSet::<&Path>::from_iter(
 		info.subsystems().iter().map(|ssf| ssf.messages_to_send.iter()).flatten(),
 	);
-	let incoming =
-		HashSet::<&Path>::from_iter(info.subsystems().iter().map(|ssf| &ssf.message_to_consume));
+	let incoming = HashSet::<&Path>::from_iter(
+		info.subsystems().iter().filter_map(|ssf| ssf.message_to_consume.as_ref()),
+	);
 
 	// Try to maintain the ordering according to the span start in the declaration.
 	fn cmp<'p, 'q>(a: &'p &&Path, b: &'q &&Path) -> std::cmp::Ordering {

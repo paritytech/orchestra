@@ -60,10 +60,12 @@ impl<'a> ConnectionGraph<'a> {
 			for outgoing in ssf.messages_to_send.iter() {
 				outgoing_lut.entry(outgoing).or_default().push((&ssf.generic, node_index));
 			}
-			if let Some(_first_consument) =
-				consuming_lut.insert(&ssf.message_to_consume, (&ssf.generic, node_index))
-			{
-				// bail, two subsystems consuming the same message
+			if let Some(ref consumes) = ssf.message_to_consume {
+				if let Some(_first_consument) =
+					consuming_lut.insert(consumes, (&ssf.generic, node_index))
+				{
+					// bail, two subsystems consuming the same message
+				}
 			}
 		}
 

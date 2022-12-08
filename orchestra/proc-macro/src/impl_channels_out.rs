@@ -22,7 +22,7 @@ use super::*;
 pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macro2::TokenStream> {
 	let message_wrapper = info.message_wrapper.clone();
 
-	let channel_name = &info.channel_names_without_wip("");
+	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
 
 	let consumes = &info.consumes_without_wip();
