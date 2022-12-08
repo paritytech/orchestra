@@ -29,7 +29,7 @@ name = "duo"
 crate-type = ["bin"]
 
 [[example]]
-name = "solo"
+name = "dig"
 crate-type = ["bin"]
 
 [features]

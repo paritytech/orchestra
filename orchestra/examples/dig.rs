@@ -24,7 +24,7 @@ mod misc;
 pub use self::misc::*;
 
 #[orchestra(signal=SigSigSig, event=EvX, error=Yikes, gen=AllMessages)]
-struct Solo {
+struct Dig {
 	#[subsystem(consumes: Plinko)]
 	goblin_tower: GoblinTower,
 
@@ -67,7 +67,7 @@ impl<Context> DragonsLair {
 }
 
 async fn setup() {
-	let builder = Solo::builder();
+	let builder = Dig::builder();
 
 	let builder = builder.goblin_tower(Fortified::default());
 	let builder = builder.goldmine(DragonsLair::default());
