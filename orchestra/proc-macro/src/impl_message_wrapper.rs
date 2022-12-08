@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
+use itertools::Itertools;
 use quote::quote;
 use syn::{spanned::Spanned, Result};
 
@@ -50,7 +53,7 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 		(TokenStream::new(), TokenStream::new())
 	};
 
-	let ts = quote! {
+	let mut ts = quote! {
 		/// Generated message type wrapper over all possible messages
 		/// used by any subsystem.
 		#[allow(missing_docs)]
@@ -80,6 +83,52 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 
 		#outgoing_from_impl
 	};
+
+	// TODO it's not perfect, if the same type is used with different paths
+	// the detection will fail
+	let outgoing = HashSet::<&Path>::from_iter(
+		info.subsystems().iter().map(|ssf| ssf.messages_to_send.iter()).flatten(),
+	);
+	let incoming =
+		HashSet::<&Path>::from_iter(info.subsystems().iter().map(|ssf| &ssf.message_to_consume));
+
+	// Try to maintain the ordering according to the span start in the declaration.
+	fn cmp<'p, 'q>(a: &'p &&Path, b: &'q &&Path) -> std::cmp::Ordering {
+		a.span()
+			.start()
+			.partial_cmp(&b.span().start())
+			.unwrap_or(std::cmp::Ordering::Equal)
+	}
+
+	// sent but not received
+	for sbnr in outgoing.difference(&incoming).sorted_by(cmp) {
+		ts.extend(
+			syn::Error::new(
+				sbnr.span(),
+				format!(
+					"Message `{}` is sent but never received",
+					sbnr.get_ident()
+						.expect("Message is a path that must end in an identifier. qed")
+				),
+			)
+			.to_compile_error(),
+		);
+	}
+
+	// received but not sent
+	for rbns in incoming.difference(&outgoing).sorted_by(cmp) {
+		ts.extend(
+			syn::Error::new(
+				rbns.span(),
+				format!(
+					"Message `{}` is received but never sent",
+					rbns.get_ident()
+						.expect("Message is a path that must end in an identifier. qed")
+				),
+			)
+			.to_compile_error(),
+		);
+	}
 
 	Ok(ts)
 }
