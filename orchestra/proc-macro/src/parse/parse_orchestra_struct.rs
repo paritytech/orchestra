@@ -109,7 +109,7 @@ pub(crate) struct SubSysField {
 
 impl SubSysField {
 	pub(crate) fn dummy_msg_name(&self) -> Ident {
-		Ident::new(format!("{}DummyMessage", self.generic).as_str(), self.name.span())
+		Ident::new(format!("{}Message", self.generic).as_str(), self.name.span())
 	}
 
 	/// Returns either the specified to be consumed messsage
@@ -122,10 +122,17 @@ impl SubSysField {
 		}
 	}
 
-	pub(crate) fn maybe_dummy_message_tokenstream(&self) -> TokenStream {
+	/// Generate the dummy message type if the subsystem does not consume one
+	///
+	/// Note: Only required to the internal structure anchoring everything to
+	/// the consuming message type. See #11 for a full solution.
+	pub(crate) fn gen_dummy_message_ty(&self) -> TokenStream {
 		if self.message_to_consume.is_none() {
 			let dummy_msg_ident = self.dummy_msg_name();
 			quote! {
+				#[doc =
+				r###"A dummy implementation to satisfy the current internal structure
+			and cannot be constructed delibarately, since it's not meant to be sent or used at all"###]
 				#[derive(Debug, Clone, Copy)]
 				pub enum #dummy_msg_ident {}
 			}

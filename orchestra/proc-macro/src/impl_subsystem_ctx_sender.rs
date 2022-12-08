@@ -116,8 +116,6 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 		let outgoing_wrapper = &Ident::new(&(subsystem_name.clone() + "OutgoingMessages"), span);
 		let message_to_consume = ssf.message_to_consume();
 
-		ts.extend(ssf.maybe_dummy_message_tokenstream());
-
 		let subsystem_ctx_trait = &Ident::new(&(subsystem_name.clone() + "ContextTrait"), span);
 		let subsystem_sender_trait = &Ident::new(&(subsystem_name.clone() + "SenderTrait"), span);
 
@@ -136,6 +134,22 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 
 		ts.extend(impl_wrapper_enum(&outgoing_wrapper, ssf.messages_to_send.as_slice())?);
 	}
+
+	// generate the empty dummy messages, where needed
+	ts.extend({
+		let mut messages = TokenStream::new();
+		for ssf in info.subsystems() {
+			messages.extend(ssf.gen_dummy_message_ty());
+		}
+		quote! {
+			#[doc = r###"Generated dummy messages, only!
+			
+			Meant to be used in conjunection with your own defined messages"###]
+			pub mod messages {
+				#messages
+			}
+		}
+	});
 
 	// impl the emtpy tuple handling for tests
 	let empty_tuple: Type = parse_quote! { () };
