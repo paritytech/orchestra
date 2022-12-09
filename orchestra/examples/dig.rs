@@ -32,6 +32,8 @@ struct Dig {
 	goldmine: Goldmine,
 }
 
+use self::messages::*;
+
 #[derive(Default)]
 pub struct Fortified;
 
