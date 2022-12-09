@@ -40,7 +40,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let subsystem_generics = &info.subsystem_generic_types();
 
 	let consumes = &info.consumes_without_wip();
-	let channel_name = &info.channel_names_without_wip("");
+	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
 
 	let channel_name_tx = &info.channel_names_without_wip("_tx");
@@ -107,7 +107,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		info.subsystems().iter().filter(|ssf| !ssf.wip).enumerate().map(|(idx, ssf)| {
 			let field_name = &ssf.name;
 			let field_type = &ssf.generic;
-			let subsystem_consumes = &ssf.message_to_consume;
+			let subsystem_consumes = &ssf.message_to_consume();
 			// Remove state generic for the item to be replaced. It sufficient to know `field_type` for
 			// that since we always move from `Init<#field_type>` to `Init<NEW>`.
 			let impl_subsystem_state_generics = recollect_without_idx(&subsystem_passthrough_state_generics[..], idx);
@@ -314,7 +314,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		.iter()
 		.map(|ssf| {
 			let field_type = &ssf.generic;
-			let consumes = &ssf.message_to_consume;
+			let consumes = &ssf.message_to_consume();
 			let subsystem_sender_trait = format_ident!("{}SenderTrait", ssf.generic);
 			let subsystem_ctx_trait = format_ident!("{}ContextTrait", ssf.generic);
 			quote! {

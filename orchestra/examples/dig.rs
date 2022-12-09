@@ -24,10 +24,15 @@ mod misc;
 pub use self::misc::*;
 
 #[orchestra(signal=SigSigSig, event=EvX, error=Yikes, gen=AllMessages)]
-struct Solo<T> {
-	#[subsystem(consumes: Plinko, sends: [MsgStrukt])]
+struct Dig {
+	#[subsystem(consumes: Plinko)]
 	goblin_tower: GoblinTower,
+
+	#[subsystem(sends: [Plinko])]
+	goldmine: Goldmine,
 }
+
+use self::messages::*;
 
 #[derive(Default)]
 pub struct Fortified;
@@ -35,25 +40,41 @@ pub struct Fortified;
 #[orchestra::subsystem(GoblinTower, error=Yikes)]
 impl<Context> Fortified {
 	fn start(self, mut ctx: Context) -> SpawnedSubsystem<Yikes> {
-		let mut sender = ctx.sender().clone();
-		ctx.spawn(
-			"GoblinTower",
-			Box::pin(async move {
-				sender.send_message(MsgStrukt(8u8)).await;
+		SpawnedSubsystem {
+			name: "GoblinTower",
+			future: Box::pin(async move {
+				while let Ok(FromOrchestra::Communication { msg: _ }) = ctx.recv().await {
+					println!("Look a plinko!")
+				}
+				Ok(())
 			}),
-		)
-		.unwrap();
-		unimplemented!("welcum")
+		}
+	}
+}
+
+#[derive(Default)]
+pub struct DragonsLair;
+
+#[orchestra::subsystem(Goldmine, error=Yikes)]
+impl<Context> DragonsLair {
+	fn start(self, mut ctx: Context) -> SpawnedSubsystem<Yikes> {
+		let mut sender = ctx.sender().clone();
+		let future = Box::pin(async move {
+			sender.send_message(Plinko).await;
+			Ok(())
+		});
+
+		SpawnedSubsystem { name: "RedThorntail", future }
 	}
 }
 
 async fn setup() {
-	let builder = Solo::builder();
+	let builder = Dig::builder();
 
 	let builder = builder.goblin_tower(Fortified::default());
-
+	let builder = builder.goldmine(DragonsLair::default());
 	let builder = builder.spawner(DummySpawner);
-	let (orchestra, _handle): (Solo<_>, _) = builder.build().unwrap();
+	let (orchestra, _handle) = builder.build().unwrap();
 
 	let orchestra_fut = orchestra
 		.running_subsystems

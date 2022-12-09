@@ -95,7 +95,7 @@ pub(crate) struct SubSysField {
 	/// part.
 	pub(crate) generic: Ident,
 	/// Type of message to be consumed by the subsystem.
-	pub(crate) message_to_consume: Path,
+	pub(crate) message_to_consume: Option<Path>,
 	/// Types of messages to be sent by the subsystem.
 	pub(crate) messages_to_send: Vec<Path>,
 	/// If the subsystem implementation is blocking execution and hence
@@ -105,6 +105,41 @@ pub(crate) struct SubSysField {
 	/// Avoids dispatching `Wrapper` type messages, but generates the variants.
 	/// Does not require the subsystem to be instantiated with the builder pattern.
 	pub(crate) wip: bool,
+}
+
+impl SubSysField {
+	pub(crate) fn dummy_msg_name(&self) -> Ident {
+		Ident::new(format!("{}Message", self.generic).as_str(), self.name.span())
+	}
+
+	/// Returns either the specified to be consumed messsage
+	/// or the generated dummy message.
+	pub(crate) fn message_to_consume(&self) -> Path {
+		if let Some(ref consumes) = self.message_to_consume {
+			consumes.clone()
+		} else {
+			Path::from(self.dummy_msg_name())
+		}
+	}
+
+	/// Generate the dummy message type if the subsystem does not consume one
+	///
+	/// Note: Only required to the internal structure anchoring everything to
+	/// the consuming message type. See #11 for a full solution.
+	pub(crate) fn gen_dummy_message_ty(&self) -> TokenStream {
+		if self.message_to_consume.is_none() {
+			let dummy_msg_ident = self.dummy_msg_name();
+			quote! {
+				#[doc =
+				r###"A dummy implementation to satisfy the current internal structure
+			and cannot be constructed delibarately, since it's not meant to be sent or used at all"###]
+				#[derive(Debug, Clone, Copy)]
+				pub enum #dummy_msg_ident {}
+			}
+		} else {
+			TokenStream::new()
+		}
+	}
 }
 
 // Converts a type enum to a path if this type is a TypePath
@@ -425,13 +460,14 @@ impl OrchestraInfo {
 	}
 
 	pub(crate) fn any_message(&self) -> Vec<Path> {
-		self.subsystems
-			.iter()
-			.map(|ssf| ssf.message_to_consume.clone())
-			.collect::<Vec<_>>()
+		self.subsystems.iter().map(|ssf| ssf.message_to_consume()).collect::<Vec<_>>()
 	}
 
-	pub(crate) fn channel_names_without_wip(&self, suffix: &'static str) -> Vec<Ident> {
+	pub(crate) fn channel_names_without_wip(
+		&self,
+		suffix: impl Into<Option<&'static str>>,
+	) -> Vec<Ident> {
+		let suffix = suffix.into().unwrap_or("");
 		self.subsystems
 			.iter()
 			.filter(|ssf| !ssf.wip)
@@ -443,7 +479,7 @@ impl OrchestraInfo {
 		self.subsystems
 			.iter()
 			.filter(|ssf| !ssf.wip)
-			.map(|ssf| ssf.message_to_consume.clone())
+			.map(|ssf| ssf.message_to_consume())
 			.collect::<Vec<_>>()
 	}
 }
@@ -487,8 +523,8 @@ impl OrchestraGuts {
 				)
 			})?;
 
-			// a `#[subsystem(..)]` annotation exists
 			if let Some((attr_tokens, span)) = subsystem_attr.next() {
+				// a `#[subsystem(..)]` annotation exists
 				if let Some((_attr_tokens2, span2)) = subsystem_attr.next() {
 					return Err({
 						let mut err = Error::new(span, "The first subsystem annotation is at");
@@ -528,12 +564,7 @@ impl OrchestraGuts {
 				} else {
 					vec![]
 				};
-				// messages deemed for consumption
-				let consumes = if let Some(consumes) = consumes {
-					consumes.consumes
-				} else {
-					return Err(Error::new(span, "Must provide exactly one consuming message type"))
-				};
+				let consumes = consumes.map(|consumes| consumes.consumes);
 
 				subsystems.push(SubSysField {
 					name: ident,
@@ -544,6 +575,7 @@ impl OrchestraGuts {
 					blocking,
 				});
 			} else {
+				// collect the "baggage"
 				let flattened = flatten_type(&ty, ident.span())?;
 				let generic_types = flattened
 					.iter()
