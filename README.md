@@ -84,10 +84,21 @@ A task spawner and subsystem context are required to be defined with `Spawner` a
 
 ## Debugging
 
-As always, debugging is notoriously annoying with bugged proc-macros.
+As always, debugging is notoriously annoying with bugged proc-macros, see [feature `"expand"`](#feature-expand).
 
-Therefore [`expander`](https://github.com/drahnr/expander) is employed to yield better
+## Features
+
+### feature `"expand"`
+
+[`expander`](https://github.com/drahnr/expander) is employed to yield better
 error messages. Enable with `--features=orchestra/expand`.
+
+### feature `"dotgraph"`
+
+Generate a directed graph which shows the connectivity according to the
+declared messages to be send and consumed. Enable with `--features=orchestra/dotgraph`.
+The localtio
+
 
 ## License
 

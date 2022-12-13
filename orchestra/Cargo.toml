@@ -34,4 +34,11 @@ crate-type = ["bin"]
 
 [features]
 default = []
+# Generate a file containing the generated code that
+# is used via `include_str!`.
 expand = ["orchestra-proc-macro/expand"]
+# Generate a connectivity graph in dot-graph form.
+# Generated file: `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`
+# Use with `dot $path/to/dot.file -Tpng > connection.graph`
+# or use a dot-graph viewer of your choice.
+dotgraph = ["orchestra-proc-macro/dotgraph"]
