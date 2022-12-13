@@ -1,6 +1,6 @@
 [package]
 name = "orchestra-proc-macro"
-description = "Generate an orchestra of subsystems from a single annotated struct definition - proc-macro"
+description = "Generate the actor pattern connectivity graph from a single annotated struct definition - proc-macro"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
