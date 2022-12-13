@@ -1,2 +1,10 @@
 [workspace]
 members = ["orchestra", "metered-channel", "orchestra/proc-macro"]
+
+[workspace.package]
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+version = "0.0.2"
+readme = "README.md"
+license = "MIT or Apache-2.0"
+repository = "https://github.com/paritytech/orchestra"

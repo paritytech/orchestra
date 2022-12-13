@@ -1,11 +1,11 @@
 [package]
 name = "orchestra-proc-macro"
-version = "0.0.2"
-authors = ["Parity Technologies <admin@parity.io>"]
-edition = "2021"
-description = "Generate an orchestra of subsystems from a single annotated struct definition."
-repository = "https://github.com/paritytech/orchestra"
-license = "MIT OR Apache-2.0"
+description = "Generate the actor pattern connectivity graph from a single annotated struct definition - proc-macro"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
@@ -29,10 +29,10 @@ thiserror = "1"
 tracing = "0.1"
 
 [features]
-default = [] # enable "graph" by default, blocked by <https://github.com/paritytech/ci_cd/issues/433>
+default = [] # enable "dotgraph" by default, blocked by <https://github.com/paritytech/ci_cd/issues/433>
 # write the expanded version to a `orchestra-expansion.[a-f0-9]{10}.rs`
 # in the `OUT_DIR` as defined by `cargo` for the `expander` crate.
 expand = []
 # Create directional message consuming / outgoing graph.
 # Generates: `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`
-graph = []
+dotgraph = []
