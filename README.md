@@ -97,7 +97,10 @@ error messages. Enable with `--features=orchestra/expand`.
 
 Generate a directed graph which shows the connectivity according to the
 declared messages to be send and consumed. Enable with `--features=orchestra/dotgraph`.
-The localtio
+The path to the generated file will be displayed and is of the form
+`${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`.
+Use `dot -Tpng ${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot > connectivity.dot` to
+convert to i.e. a `png` image or use your favorite dot file viewer.
 
 
 ## License
@@ -108,12 +111,3 @@ Licensed under either of
 * MIT license (LICENSE-MIT or <http://opensource.org/licenses/MIT>)
 
 at your option.
-
-# prioritized-metered-channel
-
-Implements a metered variant of `mpsc` channels that provide an interface to extract metrics. 
-The following metrics are available:
-- The amount of messages sent on a channel, in aggregate.
-- The amount of messages received on a channel, in aggregate.
-- How many times the caller blocked when sending messages on a channel.
-- Time of flight in micro seconds (us)
