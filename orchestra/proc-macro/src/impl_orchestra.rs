@@ -128,7 +128,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			/// Broadcast a signal to all subsystems.
 			pub async fn broadcast_signal(&mut self, signal: #signal_ty) -> ::std::result::Result<(), #error_ty > {
 				#(
-					let _ = self. #subsystem_name .send_signal(signal.clone()).await;
+					self. #subsystem_name .send_signal(signal.clone()).await?;
 				)*
 				let _ = signal;
 
