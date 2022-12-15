@@ -141,10 +141,9 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 		for ssf in info.subsystems() {
 			messages.extend(ssf.gen_dummy_message_ty());
 		}
+		let comment = "The exclusive home of all generated dummy messages (if any at all)";
 		quote! {
-			#[doc = r###"Generated dummy messages, only!
-			
-			Meant to be used in conjunection with your own defined messages"###]
+			#[doc = #comment]
 			pub mod messages {
 				#messages
 			}
