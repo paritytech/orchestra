@@ -36,3 +36,7 @@ expand = []
 # Create directional message consuming / outgoing graph.
 # Generates: `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`
 dotgraph = []
+# Creates a compile error if unconsumed messages are encountered
+deny_unconsumed_messages = []
+# Creates a compile error if unsent messages are encountered
+deny_unsent_messages = []

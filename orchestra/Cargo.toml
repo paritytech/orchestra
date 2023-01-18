@@ -43,3 +43,7 @@ expand = ["orchestra-proc-macro/expand"]
 # Use with `dot $path/to/dot.file -Tpng > connection.graph`
 # or use a dot-graph viewer of your choice.
 dotgraph = ["orchestra-proc-macro/dotgraph"]
+# Creates a compile error if unconsumed messages are encountered
+deny_unconsumed_messages = ["orchestra-proc-macro/deny_unconsumed_messages"]
+# Creates a compile error if unsent messages are encountered
+deny_unsent_messages = ["orchestra-proc-macro/deny_unsent_messages"]

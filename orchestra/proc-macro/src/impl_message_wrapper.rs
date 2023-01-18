@@ -102,34 +102,38 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 	}
 
 	// sent but not received
-	for sbnr in outgoing.difference(&incoming).sorted_by(cmp) {
-		ts.extend(
-			syn::Error::new(
-				sbnr.span(),
-				format!(
-					"Message `{}` is sent but never received",
-					sbnr.get_ident()
-						.expect("Message is a path that must end in an identifier. qed")
-				),
-			)
-			.to_compile_error(),
-		);
+	if cfg!(feature = "deny_unconsumed_messages") {
+		for sbnr in outgoing.difference(&incoming).sorted_by(cmp) {
+			ts.extend(
+				syn::Error::new(
+					sbnr.span(),
+					format!(
+						"Message `{}` is sent but never received",
+						sbnr.get_ident()
+							.expect("Message is a path that must end in an identifier. qed")
+					),
+				)
+				.to_compile_error(),
+			);
+		}
 	}
 
 	// received but not sent
-	for rbns in incoming.difference(&outgoing).sorted_by(cmp) {
-		ts.extend(
-			syn::Error::new(
-				rbns.span(),
-				format!(
-					"Message `{}` is received but never sent",
-					rbns.get_ident()
-						.expect("Message is a path that must end in an identifier. qed")
-				),
-			)
-			.to_compile_error(),
-		);
+	
+	if cfg!(feature = "deny_unsent_messages") {
+		for rbns in incoming.difference(&outgoing).sorted_by(cmp) {
+			ts.extend(
+				syn::Error::new(
+					rbns.span(),
+					format!(
+						"Message `{}` is received but never sent",
+						rbns.get_ident()
+							.expect("Message is a path that must end in an identifier. qed")
+					),
+				)
+				.to_compile_error(),
+			);
+		}
 	}
-
 	Ok(ts)
 }
