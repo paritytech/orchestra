@@ -169,7 +169,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 							signal_capacity: self.signal_capacity,
 						}
 					}
-					
+
 					/// Specify the the initialization function for a subsystem
 					#[allow(clippy::type_complexity)]
 					pub fn #field_name_with<F>(self, subsystem_init_fn: F ) ->
@@ -283,7 +283,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					}
 				}
 			}
-			
+
 			impl <InitStateSpawner, #( #preserved_baggage_generics, )* #( #subsystem_passthrough_state_generics, )* #( #impl_baggage_state_generics, )* >
 			#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #post_setter_generics, )* > {
 				/// Specify the baggage in the builder when it has been previously initialized
@@ -648,7 +648,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				// silence a clippy warning for the last instantiation
 				std::mem::drop(to_orchestra_tx);
 				std::mem::drop(channels_out);
-				
+
 				use #support_crate ::StreamExt;
 
 				let to_orchestra_rx = to_orchestra_rx.fuse();

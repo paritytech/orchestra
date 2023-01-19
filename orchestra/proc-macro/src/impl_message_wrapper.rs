@@ -119,7 +119,7 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 	}
 
 	// received but not sent
-	
+
 	if cfg!(feature = "deny_unsent_messages") {
 		for rbns in incoming.difference(&outgoing).sorted_by(cmp) {
 			ts.extend(
