@@ -281,7 +281,7 @@ pub(crate) fn impl_subsystem_context_trait_bounds(
 		},
 		syn::Item::Fn(ref mut struktured_fn) => {
 			if make_subsystem == MakeSubsystem::ImplSubsystemTrait {
-				return Err(syn::Error::new(struktured_fn.span(), "Cannot make a free function a subsystem, did you mean to apply `contextbound` instead?"))
+				return Err(syn::Error::new(struktured_fn.span(), "Cannot make a free function a subsystem, did you mean to apply `contextbound` instead?"));
 			}
 			apply_ctx_bound_if_present(&mut struktured_fn.sig.generics);
 		},

@@ -151,6 +151,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					#builder_where_clause
 				{
 					/// Specify the subsystem in the builder directly
+					#[allow(clippy::type_complexity)]
 					pub fn #field_name (self, var: #field_type ) ->
 						#builder <InitStateSpawner, #( #post_setter_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 					{
@@ -168,8 +169,10 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 							signal_capacity: self.signal_capacity,
 						}
 					}
+
 					/// Specify the the initialization function for a subsystem
-					pub fn #field_name_with<'a, F>(self, subsystem_init_fn: F ) ->
+					#[allow(clippy::type_complexity)]
+					pub fn #field_name_with<F>(self, subsystem_init_fn: F ) ->
 						#builder <InitStateSpawner, #( #post_setter_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 					where
 						F: 'static + Send + FnOnce(#handle) ->
@@ -195,6 +198,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					}
 				}
 
+				#[allow(clippy::type_complexity)]
 				impl <InitStateSpawner, #field_type, #( #impl_subsystem_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				#builder <InitStateSpawner, #( #post_setter_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				where
@@ -260,6 +264,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #pre_setter_generics, )* >
 			{
 				/// Specify the baggage in the builder when it was not initialized before
+				#[allow(clippy::type_complexity)]
 				pub fn #fname (self, var: #field_type ) ->
 					#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #post_setter_generics, )* >
 				{
@@ -278,9 +283,11 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					}
 				}
 			}
+
 			impl <InitStateSpawner, #( #preserved_baggage_generics, )* #( #subsystem_passthrough_state_generics, )* #( #impl_baggage_state_generics, )* >
 			#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #post_setter_generics, )* > {
 				/// Specify the baggage in the builder when it has been previously initialized
+				#[allow(clippy::type_complexity)]
 				pub fn #fname (self, var: #field_type ) ->
 					#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #post_setter_generics, )* >
 				{
@@ -367,6 +374,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			#spawner_where_clause,
 		{
 			/// Create a new orchestra utilizing the builder.
+			#[allow(clippy::type_complexity)]
 			pub fn builder< #( #subsystem_generics),* >() ->
 				#builder<Missing<S> #(, Missing< #field_type > )* >
 			where
@@ -429,6 +437,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 	ts.extend(quote!{
 		/// Builder pattern to create compile time safe construction path.
+		#[allow(clippy::type_complexity)]
 		pub struct #builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		{
 			#(
@@ -447,6 +456,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	});
 
 	ts.extend(quote! {
+		#[allow(clippy::type_complexity)]
 		impl<#initialized_builder_generics> #builder<Missing<S>, #( Missing<#field_type>, )*>
 		{
 			/// Create a new builder pattern, with all fields being uninitialized.
@@ -474,6 +484,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 	// Spawner setter
 	ts.extend(quote!{
+		#[allow(clippy::type_complexity)]
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 			#builder<Missing<S>, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		where
@@ -501,6 +512,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 	// message and signal channel capacity
 	ts.extend(quote! {
+		#[allow(clippy::type_complexity)]
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 			#builder<Init<S>, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		where
@@ -556,8 +568,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					consumer: events_rx,
 				} = connector;
 
-				let handle = events_tx.clone();
-
 				let (to_orchestra_tx, to_orchestra_rx) = #support_crate ::metered::unbounded::<
 					ToOrchestra
 				>();
@@ -600,7 +610,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 				#(
 					let #subsystem_name = match self. #subsystem_name {
-						Init::Fn(func) => func(handle.clone())?,
+						Init::Fn(func) => func(events_tx.clone())?,
 						Init::Value(val) => val,
 					};
 
@@ -635,6 +645,10 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						)?;
 				)*
 
+				// silence a clippy warning for the last instantiation
+				std::mem::drop(to_orchestra_tx);
+				std::mem::drop(channels_out);
+
 				use #support_crate ::StreamExt;
 
 				let to_orchestra_rx = to_orchestra_rx.fuse();
@@ -656,7 +670,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					to_orchestra_rx,
 				};
 
-				Ok((orchestra, handle))
+				Ok((orchestra, events_tx))
 			}
 		}
 	});
@@ -696,6 +710,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 
 		/// Spawn task of kind `self` using spawner `S`.
+		#[allow(clippy::too_many_arguments)]
 		pub fn spawn<S, M, TK, Ctx, E, SubSys>(
 			spawner: &mut S,
 			message_tx: #support_crate ::metered::MeteredSender<MessagePacket<M>>,
@@ -720,6 +735,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			let (tx, rx) = #support_crate ::oneshot::channel();
 
 			let fut = Box::pin(async move {
+				#[allow(clippy::suspicious_else_formatting)]
 				if let Err(e) = future.await {
 					#support_crate ::tracing::error!(subsystem=name, err = ?e, "subsystem exited with error");
 				} else {

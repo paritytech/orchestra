@@ -75,7 +75,7 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 		})
 	}
 
-	// Dump the graph to file.
+	// Write the graph to file.
 	#[cfg(feature = "graph")]
 	{
 		let path = std::path::PathBuf::from(env!("OUT_DIR"))
@@ -194,7 +194,7 @@ pub(crate) fn impl_wrapper_enum(wrapper: &Ident, message_types: &[Path]) -> Resu
 	let variants = to_variants(message_types, wrapper.span())?;
 
 	let ts = quote! {
-		#[allow(missing_docs)]
+		#[allow(missing_docs, clippy::large_enum_variant)]
 		#[derive(Debug)]
 		pub enum #wrapper {
 			#(
@@ -261,6 +261,7 @@ pub(crate) fn impl_subsystem_sender(
 	// 2. orchestra-global-`AllMessages`-type
 	let wrapped = |outgoing_wrapper: &TokenStream| {
 		quote! {
+			#[allow(clippy::unit_arg)]
 			#[#support_crate ::async_trait]
 			impl<OutgoingMessage> SubsystemSender< OutgoingMessage > for #subsystem_sender_name < #outgoing_wrapper >
 			where
@@ -401,6 +402,7 @@ pub(crate) fn impl_subsystem_context_trait_for(
 				}
 			}
 
+			#[allow(clippy::suspicious_else_formatting)]
 			async fn recv(&mut self) -> ::std::result::Result<FromOrchestra<Self::Message, #signal>, #error_ty> {
 				loop {
 					// If we have a message pending an orchestra signal, we only poll for signals

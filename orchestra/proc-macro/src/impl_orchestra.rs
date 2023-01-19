@@ -55,6 +55,9 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 		syn::LitStr::new(orchestra_name.to_string().to_lowercase().as_str(), orchestra_name.span());
 
 	let ts = quote! {
+		// without `cargo fmt`, there will be some weirdness around else brackets
+		// that does not originate from how we create it
+
 		/// Capacity of a bounded message channel between orchestra and subsystem
 		/// but also for bounded channels between two subsystems.
 		const CHANNEL_CAPACITY: usize = #message_channel_capacity;
@@ -63,7 +66,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 		const SIGNAL_CHANNEL_CAPACITY: usize = #signal_channel_capacity;
 
 		/// The log target tag.
-		const LOG_TARGET: &'static str = #log_target;
+		const LOG_TARGET: &str = #log_target;
 
 		/// The orchestra.
 		pub struct #orchestra_name #generics {
@@ -173,7 +176,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			}
 
 			/// Get access to internal task spawner.
-			pub fn spawner<'a> (&'a mut self) -> &'a mut S {
+			pub fn spawner (&mut self) -> &mut S {
 				&mut self.spawner
 			}
 		}
@@ -213,7 +216,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 				if let Some(ref mut instance) = self.instance {
 					match instance.tx_bounded.send(MessagePacket {
 						signals_received: instance.signals_received,
-						message: message.into(),
+						message,
 					}).timeout(MESSAGE_TIMEOUT).await
 					{
 						None => {
