@@ -34,7 +34,7 @@ name = "dig"
 crate-type = ["bin"]
 
 [features]
-default = []
+default = ["deny_unconsumed_messages","deny_unsent_messages"]
 # Generate a file containing the generated code that
 # is used via `include_str!`.
 expand = ["orchestra-proc-macro/expand"]
