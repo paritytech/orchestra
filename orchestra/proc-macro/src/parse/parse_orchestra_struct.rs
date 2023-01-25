@@ -22,8 +22,8 @@ use syn::{
 	punctuated::Punctuated,
 	spanned::Spanned,
 	token::Bracket,
-	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, Path, PathSegment,
-	Result, Token, Type, Visibility,
+	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, Path,
+	PathSegment, Result, Token, Type, Visibility,
 };
 
 use quote::{quote, ToTokens};
@@ -33,6 +33,7 @@ mod kw {
 	syn::custom_keyword!(blocking);
 	syn::custom_keyword!(consumes);
 	syn::custom_keyword!(sends);
+	syn::custom_keyword!(message_capacity);
 }
 
 #[derive(Clone, Debug)]
@@ -47,6 +48,8 @@ pub(crate) enum SubSysAttrItem {
 	Sends(Sends),
 	/// Message to be consumed by this subsystem.
 	Consumes(Consumes),
+	/// Custom message channels capacity for this subsystem
+	MessageChannelCapacity(MessageCapacity),
 }
 
 impl Parse for SubSysAttrItem {
@@ -58,6 +61,8 @@ impl Parse for SubSysAttrItem {
 			Self::Blocking(input.parse::<kw::blocking>()?)
 		} else if lookahead.peek(kw::sends) {
 			Self::Sends(input.parse::<Sends>()?)
+		} else if lookahead.peek(kw::message_capacity) {
+			Self::MessageChannelCapacity(input.parse::<MessageCapacity>()?)
 		} else {
 			Self::Consumes(input.parse::<Consumes>()?)
 		})
@@ -77,6 +82,9 @@ impl ToTokens for SubSysAttrItem {
 				quote! {}
 			},
 			Self::Consumes(_) => {
+				quote! {}
+			},
+			Self::MessageChannelCapacity(_) => {
 				quote! {}
 			},
 		};
@@ -105,6 +113,8 @@ pub(crate) struct SubSysField {
 	/// Avoids dispatching `Wrapper` type messages, but generates the variants.
 	/// Does not require the subsystem to be instantiated with the builder pattern.
 	pub(crate) wip: bool,
+	/// Custom message capacity
+	pub(crate) message_capacity: Option<usize>,
 }
 
 impl SubSysField {
@@ -289,6 +299,25 @@ impl Parse for Consumes {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct MessageCapacity {
+	#[allow(dead_code)]
+	tag: kw::message_capacity,
+	#[allow(dead_code)]
+	colon_token: Token![:],
+	value: usize,
+}
+
+impl Parse for MessageCapacity {
+	fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+		Ok(Self {
+			tag: input.parse::<kw::message_capacity>()?,
+			colon_token: input.parse()?,
+			value: input.parse::<LitInt>()?.base10_parse::<usize>()?,
+		})
+	}
+}
+
 /// Parses `(Foo, sends = [Bar, Baz])`
 /// including the `(` and `)`.
 #[derive(Debug, Clone)]
@@ -302,6 +331,8 @@ pub(crate) struct SubSystemAttrItems {
 	/// The message type being consumed by the subsystem.
 	pub(crate) consumes: Option<Consumes>,
 	pub(crate) sends: Option<Sends>,
+	/// Custom channel capacity
+	pub(crate) message_capacity: Option<MessageCapacity>,
 }
 
 impl Parse for SubSystemAttrItems {
@@ -341,8 +372,9 @@ impl Parse for SubSystemAttrItems {
 
 		let blocking = extract_variant!(unique, Blocking; default = false);
 		let wip = extract_variant!(unique, Wip; default = false);
+		let message_capacity = extract_variant!(unique, MessageChannelCapacity take );
 
-		Ok(Self { blocking, wip, sends, consumes })
+		Ok(Self { blocking, wip, sends, consumes, message_capacity })
 	}
 }
 
@@ -475,6 +507,19 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
+	pub(crate) fn channel_capacities_without_wip(&self, default_capacity: usize) -> Vec<LitInt> {
+		self.subsystems
+			.iter()
+			.filter(|ssf| !ssf.wip)
+			.map(|ssf| {
+				LitInt::new(
+					&(ssf.message_capacity.unwrap_or(default_capacity).to_string()),
+					ssf.message_capacity.span(),
+				)
+			})
+			.collect::<Vec<_>>()
+	}
+
 	pub(crate) fn consumes_without_wip(&self) -> Vec<Path> {
 		self.subsystems
 			.iter()
@@ -556,7 +601,8 @@ impl OrchestraGuts {
 				}
 				unique_subsystem_idents.insert(generic.clone());
 
-				let SubSystemAttrItems { wip, blocking, consumes, sends, .. } = subsystem_attrs;
+				let SubSystemAttrItems { wip, blocking, consumes, sends, message_capacity, .. } =
+					subsystem_attrs;
 
 				// messages to be sent
 				let sends = if let Some(sends) = sends {
@@ -565,6 +611,7 @@ impl OrchestraGuts {
 					vec![]
 				};
 				let consumes = consumes.map(|consumes| consumes.consumes);
+				let message_capacity = message_capacity.map(|capacity| capacity.value);
 
 				subsystems.push(SubSysField {
 					name: ident,
@@ -573,6 +620,7 @@ impl OrchestraGuts {
 					messages_to_send: sends,
 					wip,
 					blocking,
+					message_capacity,
 				});
 			} else {
 				// collect the "baggage"

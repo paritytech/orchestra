@@ -42,6 +42,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let consumes = &info.consumes_without_wip();
 	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
+	let channel_capacity = &info.channel_capacities_without_wip(info.message_channel_capacity);
 
 	let channel_name_tx = &info.channel_names_without_wip("_tx");
 	let channel_name_unbounded_tx = &info.channel_names_without_wip("_unbounded_tx");
@@ -448,8 +449,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			)*
 			spawner: InitStateSpawner,
 			// user provided runtime overrides,
-			// if `None`, the `orchestra(message_capacity=123,..)` is used
-			// or the default value.
+			// if `None`, then a specific subsystem capacity is used `subsystem(message_capacity: 123,...)`
+			// otherwise `orchestra(message_capacity=123,..)` is used or the default value in that exact order.
 			channel_capacity: Option<usize>,
 			signal_capacity: Option<usize>,
 		}
@@ -526,6 +527,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			}
 
 			/// Set the interconnecting message channel capacities.
+			/// This will override both static overseer default, e.g. `overseer(message_capacity=123,...)`,
+			/// **and** subsystem specific capacities, e.g. `subsystem(message_capacity=123,...)`.
 			pub fn message_channel_capacity(mut self, capacity: usize) -> Self
 			{
 				self.channel_capacity = Some(capacity);
@@ -578,7 +581,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#support_crate ::metered::channel::<
 							MessagePacket< #consumes >
 						>(
-							self.channel_capacity.unwrap_or(CHANNEL_CAPACITY)
+							self.channel_capacity.unwrap_or(#channel_capacity)
 						);
 				)*
 

@@ -59,7 +59,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 		// that does not originate from how we create it
 
 		/// Capacity of a bounded message channel between orchestra and subsystem
-		/// but also for bounded channels between two subsystems.
+		/// but also for bounded channels between two subsystems if not overriden.
 		const CHANNEL_CAPACITY: usize = #message_channel_capacity;
 
 		/// Capacity of a signal channel between a subsystem and the orchestra.
