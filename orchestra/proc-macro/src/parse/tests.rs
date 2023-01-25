@@ -187,6 +187,15 @@ mod strukt {
 	}
 
 	#[test]
+	fn parse_subsystem_attributes_works_07() {
+		assert_matches!(
+		syn::parse2::<SubSystemAttrItems>(quote! {
+			(message_capacity: 32768, sends: [Foo], consumes: Bar)
+		}), Ok(_) => {
+		});
+	}
+
+	#[test]
 	fn parse_subsystem_attributes_works_07_duplicate_send() {
 		assert_matches!(
 		syn::parse2::<SubSystemAttrItems>(quote! {
