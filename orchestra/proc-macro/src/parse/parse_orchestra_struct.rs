@@ -59,7 +59,7 @@ impl Parse for SubSysAttrItem {
 			Self::Wip(input.parse::<kw::wip>()?)
 		} else if lookahead.peek(kw::blocking) {
 			Self::Blocking(input.parse::<kw::blocking>()?)
-		} else if lookahead.peek(kw::consumes) {
+		} else if lookahead.peek(kw::sends) {
 			Self::Sends(input.parse::<Sends>()?)
 		} else if lookahead.peek(kw::message_capacity) {
 			Self::MessageChannelCapacity(input.parse::<MessageCapacity>()?)
@@ -504,6 +504,19 @@ impl OrchestraInfo {
 			.iter()
 			.filter(|ssf| !ssf.wip)
 			.map(|ssf| Ident::new(&(ssf.name.to_string() + suffix), ssf.name.span()))
+			.collect::<Vec<_>>()
+	}
+
+	pub(crate) fn channel_capacities_without_wip(&self, default_capacity: usize) -> Vec<LitInt> {
+		self.subsystems
+			.iter()
+			.filter(|ssf| !ssf.wip)
+			.map(|ssf| {
+				LitInt::new(
+					&(ssf.message_capacity.unwrap_or(default_capacity).to_string()),
+					ssf.message_capacity.span(),
+				)
+			})
 			.collect::<Vec<_>>()
 	}
 

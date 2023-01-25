@@ -42,6 +42,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let consumes = &info.consumes_without_wip();
 	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
+	let channel_capacity = &info.channel_capacities_without_wip(info.message_channel_capacity);
 
 	let channel_name_tx = &info.channel_names_without_wip("_tx");
 	let channel_name_unbounded_tx = &info.channel_names_without_wip("_unbounded_tx");
@@ -578,7 +579,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#support_crate ::metered::channel::<
 							MessagePacket< #consumes >
 						>(
-							self.channel_capacity.unwrap_or(CHANNEL_CAPACITY)
+							self.channel_capacity.unwrap_or(#channel_capacity)
 						);
 				)*
 
