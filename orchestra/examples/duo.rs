@@ -63,7 +63,7 @@ impl<Context> Fortified {
 
 #[orchestra(signal=SigSigSig, event=EvX, error=Yikes, gen=AllMessages)]
 struct Duo<T, U, V, W> {
-	#[subsystem(consumes: MsgStrukt, sends: [Plinko])]
+	#[subsystem(consumes: MsgStrukt, sends: [Plinko], message_capacity: 32768)]
 	sub0: Awesome,
 
 	#[subsystem(blocking, consumes: Plinko, sends: [MsgStrukt])]

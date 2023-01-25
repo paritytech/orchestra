@@ -304,7 +304,7 @@ pub(crate) struct MessageCapacity {
 	#[allow(dead_code)]
 	tag: kw::message_capacity,
 	#[allow(dead_code)]
-	eq_token: Token![=],
+	colon_token: Token![:],
 	value: usize,
 }
 
@@ -312,7 +312,7 @@ impl Parse for MessageCapacity {
 	fn parse(input: syn::parse::ParseStream) -> Result<Self> {
 		Ok(Self {
 			tag: input.parse::<kw::message_capacity>()?,
-			eq_token: input.parse()?,
+			colon_token: input.parse()?,
 			value: input.parse::<LitInt>()?.base10_parse::<usize>()?,
 		})
 	}
