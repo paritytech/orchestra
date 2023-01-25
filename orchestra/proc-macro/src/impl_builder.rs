@@ -449,8 +449,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			)*
 			spawner: InitStateSpawner,
 			// user provided runtime overrides,
-			// if `None`, the `orchestra(message_capacity=123,..)` is used
-			// or the default value.
+			// if `None`, then a specific subsystem capacity is used `subsystem(message_capacity: 123,...)`
+			// otherwise `orchestra(message_capacity=123,..)` is used or the default value in that exact order.
 			channel_capacity: Option<usize>,
 			signal_capacity: Option<usize>,
 		}
@@ -527,6 +527,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			}
 
 			/// Set the interconnecting message channel capacities.
+			/// This will override both static overseer default, e.g. `overseer(message_capacity=123,...)`,
+			/// **and** subsystem specific capacities, e.g. `subsystem(message_capacity=123,...)`.
 			pub fn message_channel_capacity(mut self, capacity: usize) -> Self
 			{
 				self.channel_capacity = Some(capacity);
