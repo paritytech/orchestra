@@ -521,7 +521,10 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn channel_capacities_without_wip(&self, default_capacity: usize) -> Vec<LitInt> {
+	pub(crate) fn message_channel_capacities_without_wip(
+		&self,
+		default_capacity: usize,
+	) -> Vec<LitInt> {
 		self.subsystems
 			.iter()
 			.filter(|ssf| !ssf.wip)
@@ -534,7 +537,10 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn signal_capacities_without_wip(&self, default_capacity: usize) -> Vec<LitInt> {
+	pub(crate) fn signal_channel_capacities_without_wip(
+		&self,
+		default_capacity: usize,
+	) -> Vec<LitInt> {
 		self.subsystems
 			.iter()
 			.filter(|ssf| !ssf.wip)

@@ -42,7 +42,10 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let consumes = &info.consumes_without_wip();
 	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
-	let channel_capacity = &info.channel_capacities_without_wip(info.message_channel_capacity);
+	let message_channel_capacity =
+		&info.message_channel_capacities_without_wip(info.message_channel_capacity);
+	let signal_channel_capacity =
+		&info.signal_channel_capacities_without_wip(info.signal_channel_capacity);
 
 	let channel_name_tx = &info.channel_names_without_wip("_tx");
 	let channel_name_unbounded_tx = &info.channel_names_without_wip("_unbounded_tx");
@@ -520,6 +523,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			#spawner_where_clause,
 		{
 			/// Set the interconnecting signal channel capacity.
+			/// This will override both static overseer default, e.g. `overseer(signal_capacity=123,...)`,
+			/// **and** subsystem specific capacities, e.g. `subsystem(signal_capacity: 123,...)`.
 			pub fn signal_channel_capacity(mut self, capacity: usize) -> Self
 			{
 				self.signal_capacity = Some(capacity);
@@ -528,7 +533,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 			/// Set the interconnecting message channel capacities.
 			/// This will override both static overseer default, e.g. `overseer(message_capacity=123,...)`,
-			/// **and** subsystem specific capacities, e.g. `subsystem(message_capacity=123,...)`.
+			/// **and** subsystem specific capacities, e.g. `subsystem(message_capacity: 123,...)`.
 			pub fn message_channel_capacity(mut self, capacity: usize) -> Self
 			{
 				self.channel_capacity = Some(capacity);
@@ -581,7 +586,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#support_crate ::metered::channel::<
 							MessagePacket< #consumes >
 						>(
-							self.channel_capacity.unwrap_or(#channel_capacity)
+							self.channel_capacity.unwrap_or(#message_channel_capacity)
 						);
 				)*
 
@@ -624,7 +629,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#support_crate ::select_message_channel_strategy
 					);
 					let (signal_tx, signal_rx) = #support_crate ::metered::channel(
-						self.signal_capacity.unwrap_or(SIGNAL_CHANNEL_CAPACITY)
+						self.signal_capacity.unwrap_or(#signal_channel_capacity)
 					);
 
 					let ctx = #subsystem_ctx_name::< #consumes >::new(
