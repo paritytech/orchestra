@@ -59,7 +59,7 @@ impl Parse for SubSysAttrItem {
 			Self::Wip(input.parse::<kw::wip>()?)
 		} else if lookahead.peek(kw::blocking) {
 			Self::Blocking(input.parse::<kw::blocking>()?)
-		} else if lookahead.peek(kw::sends) {
+		} else if lookahead.peek(kw::consumes) {
 			Self::Sends(input.parse::<Sends>()?)
 		} else if lookahead.peek(kw::message_capacity) {
 			Self::MessageChannelCapacity(input.parse::<MessageCapacity>()?)
