@@ -48,7 +48,6 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 
 	let event_ty = &info.extern_event_ty;
 
-	let message_channel_capacity = info.message_channel_capacity;
 	let signal_channel_capacity = info.signal_channel_capacity;
 
 	let log_target =
