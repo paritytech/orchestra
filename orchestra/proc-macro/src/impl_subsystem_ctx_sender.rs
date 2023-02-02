@@ -76,7 +76,7 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 	}
 
 	// Write the graph to file.
-	#[cfg(feature = "graph")]
+	#[cfg(feature = "dotgraph")]
 	{
 		let path = std::path::PathBuf::from(env!("OUT_DIR"))
 			.join(orchestra_name.to_string().to_lowercase() + "-subsystem-messaging.dot");
