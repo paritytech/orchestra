@@ -30,15 +30,15 @@ pub(crate) struct ConnectionGraph<'a> {
 	/// the receiver of the message.
 	pub(crate) graph: Graph<Ident, Path>,
 	/// Cycles within the graph
-	#[cfg_attr(not(feature = "graph"), allow(dead_code))]
+	#[cfg_attr(not(feature = "dotgraph"), allow(dead_code))]
 	pub(crate) sccs: Vec<Vec<NodeIndex>>,
 	/// Messages that are never being sent (and by which subsystem), but are consumed
 	/// Maps the message `Path` to the subsystem `Ident` represented by `NodeIndex`.
-	#[cfg_attr(not(feature = "graph"), allow(dead_code))]
+	#[cfg_attr(not(feature = "dotgraph"), allow(dead_code))]
 	pub(crate) unsent_messages: HashMap<&'a Path, (&'a Ident, NodeIndex)>,
 	/// Messages being sent (and by which subsystem), but not consumed by any subsystem
 	/// Maps the message `Path` to the subsystem `Ident` represented by `NodeIndex`.
-	#[cfg_attr(not(feature = "graph"), allow(dead_code))]
+	#[cfg_attr(not(feature = "dotgraph"), allow(dead_code))]
 	pub(crate) unconsumed_messages: HashMap<&'a Path, Vec<(&'a Ident, NodeIndex)>>,
 }
 
@@ -180,7 +180,7 @@ impl<'a> ConnectionGraph<'a> {
 	/// Render a graphviz (aka dot graph) to a file.
 	///
 	/// Cycles are annotated with the lower
-	#[cfg(feature = "graph")]
+	#[cfg(feature = "dotgraph")]
 	pub(crate) fn graphviz(self, dest: &mut impl std::io::Write) -> std::io::Result<()> {
 		use self::graph_helpers::*;
 		use petgraph::{
@@ -344,7 +344,7 @@ fn greek_alphabet() -> [char; GREEK_ALPHABET_SIZE] {
 	alphabet
 }
 
-#[cfg(feature = "graph")]
+#[cfg(feature = "dotgraph")]
 mod graph_helpers {
 	use super::HashMap;
 
