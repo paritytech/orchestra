@@ -218,11 +218,12 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 							#support_crate ::tracing::error!(
 								target: LOG_TARGET,
 								%origin,
-								"Subsystem {} appears unresponsive.",
+								"Subsystem {} appears unresponsive when sending a message of type {}.",
 								instance.name,
+								::std::any::type_name::<M>(),
 							);
 							Err(#error_ty :: from(
-								#support_crate ::OrchestraError::SubsystemStalled(instance.name)
+								#support_crate ::OrchestraError::SubsystemStalled(instance.name, "message", ::std::any::type_name::<M>())
 							))
 						}
 						Some(res) => res.map_err(Into::into),
@@ -242,7 +243,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 					match instance.tx_signal.send(signal).timeout(SIGNAL_TIMEOUT).await {
 						None => {
 							Err(#error_ty :: from(
-								#support_crate ::OrchestraError::SubsystemStalled(instance.name)
+								#support_crate ::OrchestraError::SubsystemStalled(instance.name, "signal", ::std::any::type_name::<#signal>())
 							))
 						}
 						Some(res) => {

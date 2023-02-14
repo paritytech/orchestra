@@ -286,8 +286,8 @@ pub enum OrchestraError {
 	#[error("Failed to {0}")]
 	Context(String),
 
-	#[error("Subsystem stalled: {0}")]
-	SubsystemStalled(&'static str),
+	#[error("Subsystem stalled: {0}, source: {1}, type: {2}")]
+	SubsystemStalled(&'static str, &'static str, &'static str),
 
 	/// Per origin (or subsystem) annotations to wrap an error.
 	#[error("Error originated in {origin}")]
