@@ -226,7 +226,9 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 								#support_crate ::OrchestraError::SubsystemStalled(instance.name, "message", ::std::any::type_name::<M>())
 							))
 						}
-						Some(res) => res.map_err(Into::into),
+						Some(res) => res.map_err(|e| #error_ty :: from(
+								#support_crate ::OrchestraError::QueueError(e)
+							)),
 					}
 				} else {
 					Ok(())
@@ -247,7 +249,9 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 							))
 						}
 						Some(res) => {
-							let res = res.map_err(Into::into);
+							let res = res.map_err(|e| #error_ty :: from(
+								#support_crate ::OrchestraError::QueueError(e)
+							));
 							if res.is_ok() {
 								instance.signals_received += 1;
 							}

@@ -16,20 +16,18 @@
 
 //! Metered variant of bounded mpsc channels to be able to extract metrics.
 
+use async_channel::{bounded, TryRecvError, TrySendError};
 use futures::{
-	channel::mpsc,
-	sink::SinkExt,
 	stream::Stream,
 	task::{Context, Poll},
 };
-
 use std::{pin::Pin, result};
 
 use super::{measure_tof_check, CoarseInstant, MaybeTimeOfFlight, Meter};
 
 /// Create a wrapped `mpsc::channel` pair of `MeteredSender` and `MeteredReceiver`.
 pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
-	let (tx, rx) = mpsc::channel::<MaybeTimeOfFlight<T>>(capacity);
+	let (tx, rx) = bounded::<MaybeTimeOfFlight<T>>(capacity);
 	let shared_meter = Meter::default();
 	let tx = MeteredSender { meter: shared_meter.clone(), inner: tx };
 	let rx = MeteredReceiver { meter: shared_meter, inner: rx };
@@ -41,11 +39,18 @@ pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
 pub struct MeteredReceiver<T> {
 	// count currently contained messages
 	meter: Meter,
-	inner: mpsc::Receiver<MaybeTimeOfFlight<T>>,
+	inner: async_channel::Receiver<MaybeTimeOfFlight<T>>,
+}
+
+/// A bounded channel error
+#[derive(thiserror::Error, Debug)]
+pub enum SendError {
+	#[error("Bounded channel has been disconnected")]
+	Disconnected,
 }
 
 impl<T> std::ops::Deref for MeteredReceiver<T> {
-	type Target = mpsc::Receiver<MaybeTimeOfFlight<T>>;
+	type Target = async_channel::Receiver<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -60,7 +65,7 @@ impl<T> std::ops::DerefMut for MeteredReceiver<T> {
 impl<T> Stream for MeteredReceiver<T> {
 	type Item = T;
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		match mpsc::Receiver::poll_next(Pin::new(&mut self.inner), cx) {
+		match async_channel::Receiver::poll_next(Pin::new(&mut self.inner), cx) {
 			Poll::Ready(maybe_value) => Poll::Ready(self.maybe_meter_tof(maybe_value)),
 			Poll::Pending => Poll::Pending,
 		}
@@ -96,10 +101,10 @@ impl<T> MeteredReceiver<T> {
 	}
 
 	/// Attempt to receive the next item.
-	pub fn try_next(&mut self) -> Result<Option<T>, mpsc::TryRecvError> {
-		match self.inner.try_next()? {
-			Some(value) => Ok(self.maybe_meter_tof(Some(value))),
-			None => Ok(None),
+	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
+		match self.inner.try_recv() {
+			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
+			Err(err) => Err(err),
 		}
 	}
 }
@@ -115,7 +120,7 @@ impl<T> futures::stream::FusedStream for MeteredReceiver<T> {
 #[derive(Debug)]
 pub struct MeteredSender<T> {
 	meter: Meter,
-	inner: mpsc::Sender<MaybeTimeOfFlight<T>>,
+	inner: async_channel::Sender<MaybeTimeOfFlight<T>>,
 }
 
 impl<T> Clone for MeteredSender<T> {
@@ -125,7 +130,7 @@ impl<T> Clone for MeteredSender<T> {
 }
 
 impl<T> std::ops::Deref for MeteredSender<T> {
-	type Target = mpsc::Sender<MaybeTimeOfFlight<T>>;
+	type Target = async_channel::Sender<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -154,23 +159,23 @@ impl<T> MeteredSender<T> {
 	}
 
 	/// Send message, wait until capacity is available.
-	pub async fn send(&mut self, msg: T) -> result::Result<(), mpsc::SendError>
+	pub async fn send(&mut self, msg: T) -> result::Result<(), SendError>
 	where
 		Self: Unpin,
 	{
 		match self.try_send(msg) {
 			Err(send_err) => {
 				if !send_err.is_full() {
-					return Err(send_err.into_send_error())
+					return Err(SendError::Disconnected)
 				}
 
 				let msg = send_err.into_inner();
 				self.meter.note_sent();
 				let fut = self.inner.send(msg);
 				futures::pin_mut!(fut);
-				fut.await.map_err(|e| {
+				fut.await.map_err(|_| {
 					self.meter.retract_sent();
-					e
+					SendError::Disconnected
 				})
 			},
 			_ => Ok(()),
@@ -178,10 +183,7 @@ impl<T> MeteredSender<T> {
 	}
 
 	/// Attempt to send message or fail immediately.
-	pub fn try_send(
-		&mut self,
-		msg: T,
-	) -> result::Result<(), mpsc::TrySendError<MaybeTimeOfFlight<T>>> {
+	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<MaybeTimeOfFlight<T>>> {
 		let msg = self.prepare_with_tof(msg);
 		self.inner.try_send(msg).map_err(|e| {
 			if e.is_full() {

@@ -130,7 +130,7 @@ fn failed_send_does_not_inc_sent() {
 
 #[test]
 fn blocked_send_is_metered() {
-	let (mut bounded_sender, mut bounded_receiver) = channel::<Msg>(1);
+	let (mut bounded_sender, mut bounded_receiver) = channel::<Msg>(2);
 
 	block_on(async move {
 		assert!(bounded_sender.send(Msg::default()).await.is_ok());
