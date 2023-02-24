@@ -134,7 +134,7 @@ fn measure_tof_check(nth: usize) -> bool {
 /// of a single type `T`
 
 #[derive(Debug)]
-pub enum MaybeTimeOfFlight<T> {
+pub enum MaybeTimeOfFlight<T: Sized> {
 	Bare(T),
 	WithTimeOfFlight(T, CoarseInstant),
 }

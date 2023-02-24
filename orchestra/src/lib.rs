@@ -275,7 +275,7 @@ pub enum OrchestraError {
 	NotifyCancellation(#[from] oneshot::Canceled),
 
 	#[error(transparent)]
-	QueueError(#[from] mpsc::SendError),
+	QueueError(#[from] metered::SendError),
 
 	#[error("Failed to spawn task {0}")]
 	TaskSpawn(&'static str),
