@@ -107,6 +107,11 @@ impl<T> MeteredReceiver<T> {
 			Err(err) => Err(err),
 		}
 	}
+
+	/// Returns the current number of messages in the channel
+	pub fn len(&self) -> usize {
+		self.inner.len()
+	}
 }
 
 impl<T> futures::stream::FusedStream for MeteredReceiver<T> {
@@ -193,5 +198,10 @@ impl<T> MeteredSender<T> {
 			self.meter.retract_sent();
 			e
 		})
+	}
+
+	/// Returns the current number of messages in the channel
+	pub fn len(&self) -> usize {
+		self.inner.len()
 	}
 }

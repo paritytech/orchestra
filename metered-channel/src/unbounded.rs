@@ -17,18 +17,18 @@
 //! Metered variant of unbounded mpsc channels to be able to extract metrics.
 
 use futures::{
-	channel::mpsc,
 	stream::Stream,
 	task::{Context, Poll},
 };
 
+use async_channel::{TryRecvError, TrySendError};
 use std::{pin::Pin, result};
 
 use super::{measure_tof_check, CoarseInstant, MaybeTimeOfFlight, Meter};
 
 /// Create a wrapped `mpsc::channel` pair of `MeteredSender` and `MeteredReceiver`.
 pub fn unbounded<T>() -> (UnboundedMeteredSender<T>, UnboundedMeteredReceiver<T>) {
-	let (tx, rx) = mpsc::unbounded::<MaybeTimeOfFlight<T>>();
+	let (tx, rx) = async_channel::unbounded::<MaybeTimeOfFlight<T>>();
 	let shared_meter = Meter::default();
 	let tx = UnboundedMeteredSender { meter: shared_meter.clone(), inner: tx };
 	let rx = UnboundedMeteredReceiver { meter: shared_meter, inner: rx };
@@ -40,11 +40,11 @@ pub fn unbounded<T>() -> (UnboundedMeteredSender<T>, UnboundedMeteredReceiver<T>
 pub struct UnboundedMeteredReceiver<T> {
 	// count currently contained messages
 	meter: Meter,
-	inner: mpsc::UnboundedReceiver<MaybeTimeOfFlight<T>>,
+	inner: async_channel::Receiver<MaybeTimeOfFlight<T>>,
 }
 
 impl<T> std::ops::Deref for UnboundedMeteredReceiver<T> {
-	type Target = mpsc::UnboundedReceiver<MaybeTimeOfFlight<T>>;
+	type Target = async_channel::Receiver<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -59,7 +59,7 @@ impl<T> std::ops::DerefMut for UnboundedMeteredReceiver<T> {
 impl<T> Stream for UnboundedMeteredReceiver<T> {
 	type Item = T;
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		match mpsc::UnboundedReceiver::poll_next(Pin::new(&mut self.inner), cx) {
+		match async_channel::Receiver::poll_next(Pin::new(&mut self.inner), cx) {
 			Poll::Ready(maybe_value) => Poll::Ready(self.maybe_meter_tof(maybe_value)),
 			Poll::Pending => Poll::Pending,
 		}
@@ -95,11 +95,16 @@ impl<T> UnboundedMeteredReceiver<T> {
 	}
 
 	/// Attempt to receive the next item.
-	pub fn try_next(&mut self) -> Result<Option<T>, mpsc::TryRecvError> {
-		match self.inner.try_next()? {
-			Some(value) => Ok(self.maybe_meter_tof(Some(value))),
-			None => Ok(None),
+	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
+		match self.inner.try_recv() {
+			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
+			Err(err) => Err(err),
 		}
+	}
+
+	/// Returns the current number of messages in the channel
+	pub fn len(&self) -> usize {
+		self.inner.len()
 	}
 }
 
@@ -114,7 +119,7 @@ impl<T> futures::stream::FusedStream for UnboundedMeteredReceiver<T> {
 #[derive(Debug)]
 pub struct UnboundedMeteredSender<T> {
 	meter: Meter,
-	inner: mpsc::UnboundedSender<MaybeTimeOfFlight<T>>,
+	inner: async_channel::Sender<MaybeTimeOfFlight<T>>,
 }
 
 impl<T> Clone for UnboundedMeteredSender<T> {
@@ -124,7 +129,7 @@ impl<T> Clone for UnboundedMeteredSender<T> {
 }
 
 impl<T> std::ops::Deref for UnboundedMeteredSender<T> {
-	type Target = mpsc::UnboundedSender<MaybeTimeOfFlight<T>>;
+	type Target = async_channel::Sender<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -153,14 +158,16 @@ impl<T> UnboundedMeteredSender<T> {
 	}
 
 	/// Attempt to send message or fail immediately.
-	pub fn unbounded_send(
-		&self,
-		msg: T,
-	) -> result::Result<(), mpsc::TrySendError<MaybeTimeOfFlight<T>>> {
+	pub fn unbounded_send(&self, msg: T) -> result::Result<(), TrySendError<MaybeTimeOfFlight<T>>> {
 		let msg = self.prepare_with_tof(msg);
-		self.inner.unbounded_send(msg).map_err(|e| {
+		self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent();
 			e
 		})
+	}
+
+	/// Returns the current number of messages in the channel
+	pub fn len(&self) -> usize {
+		self.inner.len()
 	}
 }
