@@ -53,6 +53,35 @@ fn try_send_try_next() {
 }
 
 #[test]
+fn try_send_try_next_unbounded() {
+	block_on(async move {
+		let (tx, mut rx) = unbounded::<Msg>();
+		let msg = Msg::default();
+		assert_matches!(rx.meter().read(), Readout { sent: 0, received: 0, .. });
+		tx.unbounded_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 1, received: 0, .. });
+		tx.unbounded_send(msg).unwrap();
+		tx.unbounded_send(msg).unwrap();
+		tx.unbounded_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 0, .. });
+		rx.try_next().unwrap();
+		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 1, .. });
+		rx.try_next().unwrap();
+		rx.try_next().unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 3, blocked: 0, tof } => {
+			// every second in test, consumed before
+			assert_eq!(dbg!(tof).len(), 1);
+		});
+		rx.try_next().unwrap();
+		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 4, blocked: 0, tof } => {
+			// every second in test, consumed before
+			assert_eq!(dbg!(tof).len(), 0);
+		});
+		assert!(rx.try_next().is_err());
+	});
+}
+
+#[test]
 fn with_tasks() {
 	let (ready, go) = futures::channel::oneshot::channel();
 
