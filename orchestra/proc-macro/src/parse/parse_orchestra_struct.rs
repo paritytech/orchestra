@@ -23,7 +23,7 @@ use syn::{
 	spanned::Spanned,
 	token,
 	token::Bracket,
-	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, Path,
+	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, LitStr, Path,
 	PathSegment, Result, Token, Type, Visibility,
 };
 
@@ -36,6 +36,7 @@ mod kw {
 	syn::custom_keyword!(sends);
 	syn::custom_keyword!(message_capacity);
 	syn::custom_keyword!(signal_capacity);
+	syn::custom_keyword!(cfg);
 }
 
 #[derive(Clone, Debug)]
@@ -54,6 +55,7 @@ pub(crate) enum SubSysAttrItem {
 	MessageChannelCapacity(ChannelCapacity<kw::message_capacity>),
 	/// Custom signal channels capacity for this subsystem
 	SignalChannelCapacity(ChannelCapacity<kw::signal_capacity>),
+	FeatureGuard(FeatureGuard),
 }
 
 impl Parse for SubSysAttrItem {
@@ -69,6 +71,8 @@ impl Parse for SubSysAttrItem {
 			Self::MessageChannelCapacity(input.parse::<ChannelCapacity<kw::message_capacity>>()?)
 		} else if lookahead.peek(kw::signal_capacity) {
 			Self::SignalChannelCapacity(input.parse::<ChannelCapacity<kw::signal_capacity>>()?)
+		} else if lookahead.peek(kw::cfg) {
+			Self::FeatureGuard(input.parse::<FeatureGuard>()?)
 		} else {
 			Self::Consumes(input.parse::<Consumes>()?)
 		})
@@ -94,6 +98,9 @@ impl ToTokens for SubSysAttrItem {
 				quote! {}
 			},
 			Self::SignalChannelCapacity(_) => {
+				quote! {}
+			},
+			Self::FeatureGuard(_) => {
 				quote! {}
 			},
 		};
@@ -126,6 +133,8 @@ pub(crate) struct SubSysField {
 	pub(crate) message_capacity: Option<usize>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
+
+	pub(crate) feature_guard: Option<String>,
 }
 
 impl SubSysField {
@@ -287,6 +296,34 @@ impl Parse for Sends {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct FeatureGuard {
+	#[allow(dead_code)]
+	pub(crate) keyword_feature_guard: Option<kw::cfg>,
+	#[allow(dead_code)]
+	pub(crate) colon: Option<Token![:]>,
+	pub(crate) feature_name: String,
+}
+
+impl Parse for FeatureGuard {
+	fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+		let lookahead = input.lookahead1();
+		Ok(if lookahead.peek(kw::cfg) {
+			Self {
+				keyword_feature_guard: Some(input.parse()?),
+				colon: input.parse()?,
+				feature_name: input.parse::<LitStr>()?.value(),
+			}
+		} else {
+			Self {
+				keyword_feature_guard: None,
+				colon: None,
+				feature_name: input.parse::<LitStr>()?.value(),
+			}
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Consumes {
 	#[allow(dead_code)]
 	pub(crate) keyword_consumes: Option<kw::consumes>,
@@ -346,6 +383,7 @@ pub(crate) struct SubSystemAttrItems {
 	pub(crate) message_capacity: Option<ChannelCapacity<kw::message_capacity>>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<ChannelCapacity<kw::signal_capacity>>,
+	pub(crate) feature_guard: Option<FeatureGuard>,
 }
 
 impl Parse for SubSystemAttrItems {
@@ -387,8 +425,17 @@ impl Parse for SubSystemAttrItems {
 		let wip = extract_variant!(unique, Wip; default = false);
 		let message_capacity = extract_variant!(unique, MessageChannelCapacity take );
 		let signal_capacity = extract_variant!(unique, SignalChannelCapacity take );
+		let feature_guard = extract_variant!(unique, FeatureGuard take );
 
-		Ok(Self { blocking, wip, sends, consumes, message_capacity, signal_capacity })
+		Ok(Self {
+			blocking,
+			wip,
+			sends,
+			consumes,
+			message_capacity,
+			signal_capacity,
+			feature_guard,
+		})
 	}
 }
 
@@ -463,6 +510,15 @@ impl OrchestraInfo {
 
 	pub(crate) fn subsystems(&self) -> &[SubSysField] {
 		self.subsystems.as_slice()
+	}
+
+	pub(crate) fn feature_gates(&self) -> Vec<TokenStream> {
+		self.subsystems
+			.iter()
+			.map(|s| {
+				s.feature_guard.clone().map_or(quote! {}, |fg| quote! { #[cfg(feature = #fg)] })
+			})
+			.collect::<Vec<_>>()
 	}
 
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
@@ -641,6 +697,7 @@ impl OrchestraGuts {
 					sends,
 					message_capacity,
 					signal_capacity,
+					feature_guard,
 					..
 				} = subsystem_attrs;
 
@@ -663,6 +720,7 @@ impl OrchestraGuts {
 					blocking,
 					message_capacity,
 					signal_capacity,
+					feature_guard: feature_guard.map(|feature| feature.feature_name),
 				});
 			} else {
 				// collect the "baggage"

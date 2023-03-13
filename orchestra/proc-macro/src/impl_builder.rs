@@ -37,6 +37,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
 
 	let subsystem_name = &info.subsystem_names_without_wip();
+	let feature_guards = &info.feature_gates();
 	let subsystem_generics = &info.subsystem_generic_types();
 
 	let consumes = &info.consumes_without_wip();
@@ -445,6 +446,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		pub struct #builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		{
 			#(
+				#feature_guards
 				#subsystem_name: #subsystem_passthrough_state_generics,
 			)*
 			#(
@@ -475,6 +477,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 				Self {
 					#(
+						#feature_guards
 						#field_name: Missing::<#field_type>::default(),
 					)*
 					spawner: Missing::<S>::default(),
@@ -503,6 +506,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			{
 				#builder {
 					#(
+						#feature_guards
 						#field_name: self. #field_name,
 					)*
 					spawner: Init::<S>::Value(spawner),
@@ -581,6 +585,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				>();
 
 				#(
+					#feature_guards
 					let (#channel_name_tx, #channel_name_rx)
 					=
 						#support_crate ::metered::channel::<
@@ -591,6 +596,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				)*
 
 				#(
+					#feature_guards
 					let (#channel_name_unbounded_tx, #channel_name_unbounded_rx) =
 						#support_crate ::metered::unbounded::<
 							MessagePacket< #consumes >
@@ -600,9 +606,11 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				let channels_out =
 					ChannelsOut {
 						#(
+							#feature_guards
 							#channel_name: #channel_name_tx .clone(),
 						)*
 						#(
+							#feature_guards
 							#channel_name_unbounded: #channel_name_unbounded_tx,
 						)*
 					};
@@ -617,6 +625,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					>::new();
 
 				#(
+					#feature_guards
+					let #subsystem_name: OrchestratedSubsystem< #consumes > = {
 					let #subsystem_name = match self. #subsystem_name {
 						Init::Fn(func) => func(events_tx.clone())?,
 						Init::Value(val) => val,
@@ -640,7 +650,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#subsystem_name_str_literal
 					);
 
-					let #subsystem_name: OrchestratedSubsystem< #consumes > =
 						spawn::<_,_, #blocking, _, _, _>(
 							&mut spawner,
 							#channel_name_tx,
@@ -650,7 +659,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 							#subsystem_name,
 							#subsystem_name_str_literal,
 							&mut running_subsystems,
-						)?;
+						)?
+					};
 				)*
 
 				// silence a clippy warning for the last instantiation
@@ -662,6 +672,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				let to_orchestra_rx = to_orchestra_rx.fuse();
 				let orchestra = #orchestra_name {
 					#(
+						#feature_guards
 						#subsystem_name,
 					)*
 
