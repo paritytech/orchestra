@@ -117,6 +117,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			// that since we always move from `Init<#field_type>` to `Init<NEW>`.
 			let impl_subsystem_state_generics = recollect_without_idx(&subsystem_passthrough_state_generics[..], idx);
 
+			let feature_guard =	ssf.feature_guard.clone().map_or(quote! {}, |fg| quote! { #[cfg(feature = #fg)] });
 			let field_name_with = format_ident!("{}_with", field_name);
 			let field_name_replace = format_ident!("replace_{}", field_name);
 
@@ -150,6 +151,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 			// Create the field init `fn`
 			quote! {
+				#feature_guard
 				impl <InitStateSpawner, #field_type, #( #impl_subsystem_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				#builder <InitStateSpawner, #( #current_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				where
@@ -163,6 +165,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: Init::< #field_type >::Value(var),
 							#(
+								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
 							)*
 							#(
@@ -189,6 +192,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: boxed_func,
 							#(
+								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
 							)*
 							#(
@@ -204,6 +208,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				}
 
 				#[allow(clippy::type_complexity)]
+				#feature_guard
 				impl <InitStateSpawner, #field_type, #( #impl_subsystem_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				#builder <InitStateSpawner, #( #post_setter_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				where
@@ -230,6 +235,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: replacement,
 							#(
+								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
 							)*
 							#(
