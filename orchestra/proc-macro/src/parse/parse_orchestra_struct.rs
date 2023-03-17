@@ -521,6 +521,50 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
+	pub(crate) fn feature_gates_complete(&self) -> Vec<TokenStream> {
+		eprintln!("subsystems: {}", self.subsystems.len());
+		let enabled = self
+			.subsystems
+			.iter()
+			.map(|s| s.feature_guard.clone())
+			.filter_map(|s| s)
+			.map(|enabled| {
+				quote! {feature = #enabled}
+			})
+			.powerset()
+			.collect_vec();
+		eprintln!("enabled: {}", enabled.len());
+		let mut disabled = enabled.clone();
+		disabled.reverse();
+
+		enabled
+			.into_iter()
+			.zip(disabled)
+			.map(|(enabled, disabled)| {
+				if disabled.is_empty() {
+					quote! {
+						#[cfg(all(#(#enabled,)*))]
+					}
+				} else {
+					quote! {
+						#[cfg(all(#(#enabled,)* not(any(#(#disabled,)*))))]
+					}
+				}
+			})
+			.collect_vec()
+	}
+
+	pub(crate) fn feature_gates_inverted(&self) -> Vec<TokenStream> {
+		self.subsystems
+			.iter()
+			.map(|s| {
+				s.feature_guard
+					.clone()
+					.map_or(quote! {}, |fg| quote! { #[cfg(not(feature = #fg))] })
+			})
+			.collect::<Vec<_>>()
+	}
+
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
 		self.subsystems
 			.iter()
