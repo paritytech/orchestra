@@ -37,8 +37,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
 
 	let subsystem_name = &info.subsystem_names_without_wip();
-	let feature_guards = &info.feature_gates();
-	let feature_guards2 = &info.feature_gates();
 	let subsystem_generics = &info.subsystem_generic_types();
 
 	let consumes = &info.consumes_without_wip();
@@ -71,40 +69,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		.collect::<Vec<_>>();
 
 	let feature_powerset_cfgs = &info.feature_gates_complete();
-
-	let feature_guards_inverted = &info
-		.feature_gates_inverted()
-		.into_iter()
-		.zip(subsystem_passthrough_state_generics.clone().into_iter())
-		.map(|(ts, passthrough)| {
-			if ts.is_empty() {
-				ts
-			} else {
-				let ident = format_ident!("_phantom_{}", passthrough);
-				quote! {
-					#ts
-					#ident: ::core::marker::PhantomData<#passthrough>,
-				}
-			}
-		})
-		.collect::<Vec<TokenStream>>();
-
-	let feature_guards_inverted_field = &info
-		.feature_gates_inverted()
-		.into_iter()
-		.zip(subsystem_passthrough_state_generics.clone().into_iter())
-		.map(|(ts, passthrough)| {
-			if ts.is_empty() {
-				ts
-			} else {
-				let ident = format_ident!("_phantom_{}", passthrough);
-				quote! {
-					#ts
-					#ident: Default::default(),
-				}
-			}
-		})
-		.collect::<Vec<TokenStream>>();
 
 	let error_ty = &info.extern_error_ty;
 
@@ -203,9 +167,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: Init::< #field_type >::Value(var),
 							#(
-								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
-								#feature_guards_inverted_field
 							)*
 							#(
 								#baggage_name: self. #baggage_name,
@@ -231,9 +193,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: boxed_func,
 							#(
-								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
-								#feature_guards_inverted_field
 							)*
 							#(
 								#baggage_name: self. #baggage_name,
@@ -275,9 +235,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 						#builder {
 							#field_name: replacement,
 							#(
-								#feature_guards
 								#to_keep_subsystem_name: self. #to_keep_subsystem_name,
-								#feature_guards_inverted_field
 							)*
 							#(
 								#baggage_name: self. #baggage_name,
@@ -499,9 +457,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		pub struct #builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		{
 			#(
-				#feature_guards
 				#subsystem_name: #subsystem_passthrough_state_generics,
-				#feature_guards_inverted
 			)*
 			#(
 				#baggage_name: #baggage_passthrough_state_generics,
@@ -531,9 +487,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 				Self {
 					#(
-						#feature_guards
 						#field_name: Missing::<#field_type>::default(),
-						#feature_guards_inverted_field
 					)*
 					spawner: Missing::<S>::default(),
 
@@ -561,9 +515,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			{
 				#builder {
 					#(
-						#feature_guards
 						#field_name: self. #field_name,
-						#feature_guards_inverted_field
 					)*
 					spawner: Init::<S>::Value(spawner),
 
@@ -641,7 +593,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				>();
 
 				#(
-					#feature_guards
 					let (#channel_name_tx, #channel_name_rx)
 					=
 						#support_crate ::metered::channel::<
@@ -652,7 +603,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				)*
 
 				#(
-					#feature_guards
 					let (#channel_name_unbounded_tx, #channel_name_unbounded_rx) =
 						#support_crate ::metered::unbounded::<
 							MessagePacket< #consumes >
@@ -662,11 +612,9 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				let channels_out =
 					ChannelsOut {
 						#(
-							#feature_guards
 							#channel_name: #channel_name_tx .clone(),
 						)*
 						#(
-							#feature_guards
 							#channel_name_unbounded: #channel_name_unbounded_tx,
 						)*
 					};
@@ -681,7 +629,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 					>::new();
 
 				#(
-					#feature_guards
 					let #subsystem_name: OrchestratedSubsystem< #consumes > = {
 					let #subsystem_name = match self. #subsystem_name {
 						Init::Fn(func) => func(events_tx.clone())?,
@@ -728,7 +675,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				let to_orchestra_rx = to_orchestra_rx.fuse();
 				let orchestra = #orchestra_name {
 					#(
-						#feature_guards
 						#subsystem_name,
 					)*
 
