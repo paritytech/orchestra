@@ -36,9 +36,16 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let connector = format_ident!("{}Connector", orchestra_name);
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
 
+	let feature_powerset_cfgs = &info.feature_gates_complete();
+	let powerset_cfgs: Vec<TokenStream> =
+		feature_powerset_cfgs.iter().map(|set| set.guard.clone()).collect();
+
+	for cfg_set in feature_powerset_cfgs {
+		//TODO insert everything here
+	}
+
 	let subsystem_name = &info.subsystem_names_without_wip();
 	let subsystem_generics = &info.subsystem_generic_types();
-
 	let consumes = &info.consumes_without_wip();
 	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
@@ -67,8 +74,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		.enumerate()
 		.map(|(idx, _)| format_ident!("InitStateSubsystem{}", idx))
 		.collect::<Vec<_>>();
-
-	let feature_powerset_cfgs = &info.feature_gates_complete();
 
 	let error_ty = &info.extern_error_ty;
 
@@ -351,7 +356,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let mut ts = quote! {
 
 		#(
-			#feature_powerset_cfgs
+			#powerset_cfgs
 			struct Bla;
 		)*
 

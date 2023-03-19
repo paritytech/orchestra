@@ -111,7 +111,7 @@ impl ToTokens for SubSysAttrItem {
 /// A field of the struct annotated with
 /// `#[subsystem(A, B, C)]`
 #[derive(Clone, Debug)]
-pub(crate) struct SubSysField {
+pub struct SubSysField {
 	/// Name of the field.
 	pub(crate) name: Ident,
 	/// Generate generic type name for the `AllSubsystems` type
@@ -483,6 +483,16 @@ pub(crate) struct OrchestraInfo {
 	pub(crate) extern_error_ty: Path,
 }
 
+// TODO SKUNERT Introduce constructor
+pub struct SubsystemConfigSet {
+	/// These subsystems should be enabled for this config set
+	pub enabled_subsystems: Vec<SubSysField>,
+	/// These sbusystems should be disabled for this config set
+	pub disabled_subsystems: Vec<SubSysField>,
+
+	pub guard: TokenStream,
+}
+
 impl OrchestraInfo {
 	pub(crate) fn support_crate_name(&self) -> &Path {
 		&self.support_crate
@@ -521,34 +531,47 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn feature_gates_complete(&self) -> Vec<TokenStream> {
-		eprintln!("subsystems: {}", self.subsystems.len());
-		let enabled = self
+	pub(crate) fn feature_gates_complete(&self) -> Vec<SubsystemConfigSet> {
+		let subsystems_with_features = self
 			.subsystems
-			.iter()
-			.map(|s| s.feature_guard.clone())
-			.filter_map(|s| s)
-			.map(|enabled| {
-				quote! {feature = #enabled}
-			})
-			.powerset()
-			.collect_vec();
-		eprintln!("enabled: {}", enabled.len());
-		let mut disabled = enabled.clone();
-		disabled.reverse();
-
-		enabled
+			.clone()
 			.into_iter()
-			.zip(disabled)
+			.filter(|s| s.feature_guard.is_some())
+			.collect_vec();
+
+		let subsystem_with_features_powerset =
+			subsystems_with_features.clone().into_iter().powerset().collect_vec();
+		let mut subsystem_with_features_inverse_powerset = subsystem_with_features_powerset.clone();
+		subsystem_with_features_inverse_powerset.reverse();
+
+		subsystem_with_features_powerset
+			.into_iter()
+			.zip(subsystem_with_features_inverse_powerset)
 			.map(|(enabled, disabled)| {
-				if disabled.is_empty() {
+				//TODO SKUNERT remove unwrap here
+				let enabled_configs = enabled
+					.iter()
+					.map(|field| field.feature_guard.clone().unwrap())
+					.map(|s| quote! {feature = #s})
+					.collect_vec();
+				let disabled_configs = disabled
+					.iter()
+					.map(|field| field.feature_guard.clone().unwrap())
+					.map(|s| quote! {feature = #s})
+					.collect_vec();
+				let ts = if disabled.is_empty() {
 					quote! {
-						#[cfg(all(#(#enabled,)*))]
+						#[cfg(all(#(#enabled_configs,)*))]
 					}
 				} else {
 					quote! {
-						#[cfg(all(#(#enabled,)* not(any(#(#disabled,)*))))]
+						#[cfg(all(#(#enabled_configs,)* not(any(#(#disabled_configs,)*))))]
 					}
+				};
+				SubsystemConfigSet {
+					enabled_subsystems: enabled,
+					disabled_subsystems: disabled,
+					guard: ts,
 				}
 			})
 			.collect_vec()
