@@ -31,96 +31,208 @@ fn recollect_without_idx<T: Clone>(x: &[T], idx: usize) -> Vec<T> {
 /// Elements tagged with `wip` are not covered here.
 pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let orchestra_name = info.orchestra_name.clone();
+
 	let builder = format_ident!("{}Builder", orchestra_name);
 	let handle = format_ident!("{}Handle", orchestra_name);
 	let connector = format_ident!("{}Connector", orchestra_name);
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
-
 	let feature_powerset_cfgs = &info.feature_gates_complete();
 
 	let mut ts = quote! {};
+
+	// In this loop we generate items that are reguired for each config set separately
 	for cfg_set in feature_powerset_cfgs.into_iter() {
-		//TODO insert everything here
-
-		let cfg_guard = cfg_set.guard.clone();
-		let subsystem_name = &info.subsystem_names_without_wip2(&cfg_set.enabled_subsystems);
-		let subsystem_generics = &info.subsystem_generic_types2(&cfg_set.enabled_subsystems);
-		let consumes = &info.consumes_without_wip2(&cfg_set.enabled_subsystems);
-		let channel_name = &info.channel_names_without_wip2(None, &cfg_set.enabled_subsystems);
-		let channel_name_unbounded =
-			&info.channel_names_without_wip2("_unbounded", &cfg_set.enabled_subsystems);
-		let message_channel_capacity = &info.message_channel_capacities_without_wip2(
-			info.message_channel_capacity,
-			&cfg_set.enabled_subsystems,
+		let builder_items_for_config = impl_feature_guarded_items(
+			info,
+			cfg_set,
+			&builder,
+			&subsystem_ctx_name,
+			&connector,
+			&orchestra_name,
+			&handle,
 		);
-		let signal_channel_capacity = &info.signal_channel_capacities_without_wip2(
-			info.signal_channel_capacity,
-			&cfg_set.enabled_subsystems,
-		);
+		ts.extend(builder_items_for_config);
+	}
 
-		let channel_name_tx = &info.channel_names_without_wip2("_tx", &cfg_set.enabled_subsystems);
-		let channel_name_unbounded_tx =
-			&info.channel_names_without_wip2("_unbounded_tx", &cfg_set.enabled_subsystems);
+	let event = &info.extern_event_ty;
+	let support_crate = info.support_crate_name();
 
-		let channel_name_rx = &info.channel_names_without_wip2("_rx", &cfg_set.enabled_subsystems);
-		let channel_name_unbounded_rx =
-			&info.channel_names_without_wip2("_unbounded_rx", &cfg_set.enabled_subsystems);
+	ts.extend(quote! {
+		/// Handle for an orchestra.
+		pub type #handle = #support_crate ::metered::MeteredSender< #event >;
 
-		let baggage_name = &info.baggage_names();
-		let baggage_generic_ty = &info.baggage_generic_types();
+		/// External connector.
+		pub struct #connector {
+			/// Publicly accessible handle, to be used for setting up
+			/// components that are _not_ subsystems but access is needed
+			/// due to other limitations.
+			///
+			/// For subsystems, use the `_with` variants of the builder.
+			handle: #handle,
+			/// The side consumed by the `spawned` side of the orchestra pattern.
+			consumer: #support_crate ::metered::MeteredReceiver < #event >,
+		}
 
-		// State generics that are used to encode each field's status (Init/Missing)
-		let baggage_passthrough_state_generics = baggage_name
-			.iter()
-			.enumerate()
-			.map(|(idx, _)| format_ident!("InitStateBaggage{}", idx))
-			.collect::<Vec<_>>();
-		let subsystem_passthrough_state_generics = subsystem_name
-			.iter()
-			.enumerate()
-			.map(|(idx, _)| format_ident!("InitStateSubsystem{}", idx))
-			.collect::<Vec<_>>();
+		impl #connector {
+			/// Obtain access to the orchestra handle.
+			pub fn as_handle_mut(&mut self) -> &mut #handle {
+				&mut self.handle
+			}
+			/// Obtain access to the orchestra handle.
+			pub fn as_handle(&self) -> &#handle {
+				&self.handle
+			}
+			/// Obtain a clone of the handle.
+			pub fn handle(&self) -> #handle {
+				self.handle.clone()
+			}
 
-		let error_ty = &info.extern_error_ty;
+			/// Create a new connector with non-default event channel capacity.
+			pub fn with_event_capacity(event_channel_capacity: usize) -> Self {
+				let (events_tx, events_rx) = #support_crate ::metered::channel::<
+					#event
+					>(event_channel_capacity);
 
-		let support_crate = info.support_crate_name();
-
-		let blocking = &cfg_set
-			.enabled_subsystems
-			.iter()
-			.map(|x| {
-				if x.blocking {
-					quote! { Blocking }
-				} else {
-					quote! { Regular }
+				Self {
+					handle: events_tx,
+					consumer: events_rx,
 				}
+			}
+		}
+
+		impl ::std::default::Default for #connector {
+			fn default() -> Self {
+				Self::with_event_capacity(SIGNAL_CHANNEL_CAPACITY)
+			}
+		}
+	});
+
+	let error_ty = &info.extern_error_ty;
+	ts.extend(quote! {
+			/// Convenience alias.
+			type SubsystemInitFn<T> = Box<dyn FnOnce(#handle) -> ::std::result::Result<T, #error_ty> + Send + 'static>;
+
+			/// Type for the initialized field of the orchestra builder
+			pub enum Init<T> {
+				/// Defer initialization to a point where the `handle` is available.
+				Fn(SubsystemInitFn<T>),
+				/// Directly initialize the subsystem with the given subsystem type `T`.
+				/// Also used for baggage fields
+				Value(T),
+			}
+			/// Type marker for the uninitialized field of the orchestra builder.
+			/// `PhantomData` is used for type hinting when creating uninitialized
+			/// builder, e.g. to avoid specifying the generics when instantiating
+			/// the `FooBuilder` when calling `Foo::builder()`
+			#[derive(Debug)]
+			pub struct Missing<T>(::core::marker::PhantomData<T>);
+
+			/// Trait used to mark fields status in a builder
+			trait OrchestraFieldState<T> {}
+
+			impl<T> OrchestraFieldState<T> for Init<T> {}
+			impl<T> OrchestraFieldState<T> for Missing<T> {}
+
+			impl<T> ::std::default::Default for Missing<T> {
+				fn default() -> Self {
+					Missing::<T>(::core::marker::PhantomData::<T>::default())
+				}
+			}
+	});
+	ts.extend(impl_task_kind(info));
+	ts
+}
+
+pub(crate) fn impl_feature_guarded_items(
+	info: &OrchestraInfo,
+	cfg_set: &SubsystemConfigSet,
+	builder: &Ident,
+	subsystem_ctx_name: &Ident,
+	connector: &Ident,
+	orchestra_name: &Ident,
+	handle: &Ident,
+) -> proc_macro2::TokenStream {
+	let mut ts = quote! {};
+
+	let cfg_guard = cfg_set.guard.clone();
+	let subsystem_name = &info.subsystem_names_without_wip2(&cfg_set.enabled_subsystems);
+	let subsystem_generics = &info.subsystem_generic_types2(&cfg_set.enabled_subsystems);
+	let consumes = &info.consumes_without_wip2(&cfg_set.enabled_subsystems);
+	let channel_name = &info.channel_names_without_wip2(None, &cfg_set.enabled_subsystems);
+	let channel_name_unbounded =
+		&info.channel_names_without_wip2("_unbounded", &cfg_set.enabled_subsystems);
+	let message_channel_capacity = &info.message_channel_capacities_without_wip2(
+		info.message_channel_capacity,
+		&cfg_set.enabled_subsystems,
+	);
+	let signal_channel_capacity = &info.signal_channel_capacities_without_wip2(
+		info.signal_channel_capacity,
+		&cfg_set.enabled_subsystems,
+	);
+
+	let channel_name_tx = &info.channel_names_without_wip2("_tx", &cfg_set.enabled_subsystems);
+	let channel_name_unbounded_tx =
+		&info.channel_names_without_wip2("_unbounded_tx", &cfg_set.enabled_subsystems);
+
+	let channel_name_rx = &info.channel_names_without_wip2("_rx", &cfg_set.enabled_subsystems);
+	let channel_name_unbounded_rx =
+		&info.channel_names_without_wip2("_unbounded_rx", &cfg_set.enabled_subsystems);
+
+	let baggage_name = &info.baggage_names();
+	let baggage_generic_ty = &info.baggage_generic_types();
+
+	// State generics that are used to encode each field's status (Init/Missing)
+	let baggage_passthrough_state_generics = baggage_name
+		.iter()
+		.enumerate()
+		.map(|(idx, _)| format_ident!("InitStateBaggage{}", idx))
+		.collect::<Vec<_>>();
+	let subsystem_passthrough_state_generics = subsystem_name
+		.iter()
+		.enumerate()
+		.map(|(idx, _)| format_ident!("InitStateSubsystem{}", idx))
+		.collect::<Vec<_>>();
+
+	let error_ty = &info.extern_error_ty;
+
+	let support_crate = info.support_crate_name();
+
+	let blocking = &cfg_set
+		.enabled_subsystems
+		.iter()
+		.map(|x| {
+			if x.blocking {
+				quote! { Blocking }
+			} else {
+				quote! { Regular }
+			}
+		})
+		.collect::<Vec<_>>();
+
+	// Helpers to use within quote! macros
+	let spawner_where_clause: syn::TypeParam = parse_quote! {
+			S: #support_crate ::Spawner
+	};
+
+	// Field names and real types
+	let field_name = subsystem_name.iter().chain(baggage_name.iter()).collect::<Vec<_>>();
+	let field_type = subsystem_generics
+		.iter()
+		.map(|ident| {
+			syn::Type::Path(TypePath {
+				qself: None,
+				path: Path::from(PathSegment::from(ident.clone())),
 			})
-			.collect::<Vec<_>>();
+		})
+		.chain(info.baggage().iter().map(|bag| bag.field_ty.clone()))
+		.collect::<Vec<_>>();
 
-		// Helpers to use within quote! macros
-		let spawner_where_clause: syn::TypeParam = parse_quote! {
-				S: #support_crate ::Spawner
-		};
+	// Setters logic
 
-		// Field names and real types
-		let field_name = subsystem_name.iter().chain(baggage_name.iter()).collect::<Vec<_>>();
-		let field_type = subsystem_generics
-			.iter()
-			.map(|ident| {
-				syn::Type::Path(TypePath {
-					qself: None,
-					path: Path::from(PathSegment::from(ident.clone())),
-				})
-			})
-			.chain(info.baggage().iter().map(|bag| bag.field_ty.clone()))
-			.collect::<Vec<_>>();
-
-		// Setters logic
-
-		// For each setter we need to leave the remaining fields untouched and
-		// remove the field that we are fixing in this setter
-		// For subsystems `*_with` and `replace_*` setters are needed.
-		let subsystem_specific_setters =
+	// For each setter we need to leave the remaining fields untouched and
+	// remove the field that we are fixing in this setter
+	// For subsystems `*_with` and `replace_*` setters are needed.
+	let subsystem_specific_setters =
 		cfg_set.enabled_subsystems.iter().filter(|ssf| !ssf.wip).enumerate().map(|(idx, ssf)| {
 			let field_name = &ssf.name;
 			let field_type = &ssf.generic;
@@ -259,8 +371,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			}
 		});
 
-		// Produce setters for all baggage fields as well
-		let baggage_specific_setters = info.baggage().iter().enumerate().map(|(idx, bag_field)| {
+	// Produce setters for all baggage fields as well
+	let baggage_specific_setters = info.baggage().iter().enumerate().map(|(idx, bag_field)| {
 		// Baggage fields follow subsystems
 		let fname = &bag_field.field_name;
 		let field_type = &bag_field.field_ty;
@@ -330,53 +442,53 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 	});
 
-		let initialized_builder = format_ident!("Initialized{}", builder);
-		// The direct generics as expected by the `Orchestra<_,_,..>`, without states
-		let initialized_builder_generics = quote! {
-			S, #( #baggage_generic_ty, )* #( #subsystem_generics, )*
-		};
+	let initialized_builder = format_ident!("Initialized{}", builder);
+	// The direct generics as expected by the `Orchestra<_,_,..>`, without states
+	let initialized_builder_generics = quote! {
+		S, #( #baggage_generic_ty, )* #( #subsystem_generics, )*
+	};
 
-		let builder_where_clause = cfg_set
-			.enabled_subsystems
-			.iter()
-			.map(|ssf| {
-				let field_type = &ssf.generic;
-				let consumes = &ssf.message_to_consume();
-				let subsystem_sender_trait = format_ident!("{}SenderTrait", ssf.generic);
-				let subsystem_ctx_trait = format_ident!("{}ContextTrait", ssf.generic);
-				quote! {
-					#field_type:
-						#support_crate::Subsystem< #subsystem_ctx_name < #consumes>, #error_ty>,
-					<#subsystem_ctx_name< #consumes > as #subsystem_ctx_trait>::Sender:
-						#subsystem_sender_trait,
-					#subsystem_ctx_name< #consumes >:
-						#subsystem_ctx_trait,
-				}
-			})
-			.fold(TokenStream::new(), |mut ts, addendum| {
-				ts.extend(addendum);
-				ts
-			});
-
-		ts.extend(quote! {
-			#cfg_guard
-			impl<S #(, #baggage_generic_ty )*> #orchestra_name <S #(, #baggage_generic_ty)*>
-			where
-				#spawner_where_clause,
-			{
-				/// Create a new orchestra utilizing the builder.
-				#[allow(clippy::type_complexity)]
-				pub fn builder< #( #subsystem_generics),* >() ->
-					#builder<Missing<S> #(, Missing< #field_type > )* >
-				where
-					#builder_where_clause
-				{
-					#builder :: new()
-				}
+	let builder_where_clause = cfg_set
+		.enabled_subsystems
+		.iter()
+		.map(|ssf| {
+			let field_type = &ssf.generic;
+			let consumes = &ssf.message_to_consume();
+			let subsystem_sender_trait = format_ident!("{}SenderTrait", ssf.generic);
+			let subsystem_ctx_trait = format_ident!("{}ContextTrait", ssf.generic);
+			quote! {
+				#field_type:
+					#support_crate::Subsystem< #subsystem_ctx_name < #consumes>, #error_ty>,
+				<#subsystem_ctx_name< #consumes > as #subsystem_ctx_trait>::Sender:
+					#subsystem_sender_trait,
+				#subsystem_ctx_name< #consumes >:
+					#subsystem_ctx_trait,
 			}
+		})
+		.fold(TokenStream::new(), |mut ts, addendum| {
+			ts.extend(addendum);
+			ts
 		});
 
-		ts.extend(quote!{
+	ts.extend(quote! {
+		#cfg_guard
+		impl<S #(, #baggage_generic_ty )*> #orchestra_name <S #(, #baggage_generic_ty)*>
+		where
+			#spawner_where_clause,
+		{
+			/// Create a new orchestra utilizing the builder.
+			#[allow(clippy::type_complexity)]
+			pub fn builder< #( #subsystem_generics),* >() ->
+				#builder<Missing<S> #(, Missing< #field_type > )* >
+			where
+				#builder_where_clause
+			{
+				#builder :: new()
+			}
+		}
+	});
+
+	ts.extend(quote!{
 		/// Builder pattern to create compile time safe construction path.
 		#[allow(clippy::type_complexity)]
 		#cfg_guard
@@ -397,36 +509,36 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 	});
 
-		ts.extend(quote! {
-			#[allow(clippy::type_complexity)]
-			#cfg_guard
-			impl<#initialized_builder_generics> #builder<Missing<S>, #( Missing<#field_type>, )*>
-			{
-				/// Create a new builder pattern, with all fields being uninitialized.
-				fn new() -> Self {
-					// explicitly assure the required traits are implemented
-					fn trait_from_must_be_implemented<E>()
-					where
-						E: ::std::error::Error + Send + Sync + 'static + From<#support_crate ::OrchestraError>
-					{}
+	ts.extend(quote! {
+		#[allow(clippy::type_complexity)]
+		#cfg_guard
+		impl<#initialized_builder_generics> #builder<Missing<S>, #( Missing<#field_type>, )*>
+		{
+			/// Create a new builder pattern, with all fields being uninitialized.
+			fn new() -> Self {
+				// explicitly assure the required traits are implemented
+				fn trait_from_must_be_implemented<E>()
+				where
+					E: ::std::error::Error + Send + Sync + 'static + From<#support_crate ::OrchestraError>
+				{}
 
-					trait_from_must_be_implemented::< #error_ty >();
+				trait_from_must_be_implemented::< #error_ty >();
 
-					Self {
-						#(
-							#field_name: Missing::<#field_type>::default(),
-						)*
-						spawner: Missing::<S>::default(),
+				Self {
+					#(
+						#field_name: Missing::<#field_type>::default(),
+					)*
+					spawner: Missing::<S>::default(),
 
-						channel_capacity: None,
-						signal_capacity: None,
-					}
+					channel_capacity: None,
+					signal_capacity: None,
 				}
 			}
-		});
+		}
+	});
 
-		// Spawner setter
-		ts.extend(quote!{
+	// Spawner setter
+	ts.extend(quote!{
 		#[allow(clippy::type_complexity)]
 		#cfg_guard
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
@@ -454,8 +566,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 	});
 
-		// message and signal channel capacity
-		ts.extend(quote! {
+	// message and signal channel capacity
+	ts.extend(quote! {
 		#[allow(clippy::type_complexity)]
 		#cfg_guard
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
@@ -483,13 +595,13 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 	});
 
-		// Create the string literals for spawn.
-		let subsystem_name_str_literal = subsystem_name
-			.iter()
-			.map(|ident| proc_macro2::Literal::string(ident.to_string().replace("_", "-").as_str()))
-			.collect::<Vec<_>>();
+	// Create the string literals for spawn.
+	let subsystem_name_str_literal = subsystem_name
+		.iter()
+		.map(|ident| proc_macro2::Literal::string(ident.to_string().replace("_", "-").as_str()))
+		.collect::<Vec<_>>();
 
-		ts.extend(quote! {
+	ts.extend(quote! {
 		/// Type used to represent a builder where all fields are initialized and the orchestra could be constructed.
 		#cfg_guard
 		pub type #initialized_builder<#initialized_builder_generics> = #builder<Init<S>, #( Init<#field_type>, )*>;
@@ -627,95 +739,8 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		}
 	});
 
-		ts.extend(baggage_specific_setters);
-		ts.extend(subsystem_specific_setters);
-	}
-
-	let event = &info.extern_event_ty;
-	let support_crate = info.support_crate_name();
-	ts.extend(quote! {
-		/// Handle for an orchestra.
-		pub type #handle = #support_crate ::metered::MeteredSender< #event >;
-
-		/// External connector.
-		pub struct #connector {
-			/// Publicly accessible handle, to be used for setting up
-			/// components that are _not_ subsystems but access is needed
-			/// due to other limitations.
-			///
-			/// For subsystems, use the `_with` variants of the builder.
-			handle: #handle,
-			/// The side consumed by the `spawned` side of the orchestra pattern.
-			consumer: #support_crate ::metered::MeteredReceiver < #event >,
-		}
-
-		impl #connector {
-			/// Obtain access to the orchestra handle.
-			pub fn as_handle_mut(&mut self) -> &mut #handle {
-				&mut self.handle
-			}
-			/// Obtain access to the orchestra handle.
-			pub fn as_handle(&self) -> &#handle {
-				&self.handle
-			}
-			/// Obtain a clone of the handle.
-			pub fn handle(&self) -> #handle {
-				self.handle.clone()
-			}
-
-			/// Create a new connector with non-default event channel capacity.
-			pub fn with_event_capacity(event_channel_capacity: usize) -> Self {
-				let (events_tx, events_rx) = #support_crate ::metered::channel::<
-					#event
-					>(event_channel_capacity);
-
-				Self {
-					handle: events_tx,
-					consumer: events_rx,
-				}
-			}
-		}
-
-		impl ::std::default::Default for #connector {
-			fn default() -> Self {
-				Self::with_event_capacity(SIGNAL_CHANNEL_CAPACITY)
-			}
-		}
-	});
-
-	let error_ty = &info.extern_error_ty;
-	ts.extend(quote! {
-			/// Convenience alias.
-			type SubsystemInitFn<T> = Box<dyn FnOnce(#handle) -> ::std::result::Result<T, #error_ty> + Send + 'static>;
-
-			/// Type for the initialized field of the orchestra builder
-			pub enum Init<T> {
-				/// Defer initialization to a point where the `handle` is available.
-				Fn(SubsystemInitFn<T>),
-				/// Directly initialize the subsystem with the given subsystem type `T`.
-				/// Also used for baggage fields
-				Value(T),
-			}
-			/// Type marker for the uninitialized field of the orchestra builder.
-			/// `PhantomData` is used for type hinting when creating uninitialized
-			/// builder, e.g. to avoid specifying the generics when instantiating
-			/// the `FooBuilder` when calling `Foo::builder()`
-			#[derive(Debug)]
-			pub struct Missing<T>(::core::marker::PhantomData<T>);
-
-			/// Trait used to mark fields status in a builder
-			trait OrchestraFieldState<T> {}
-
-			impl<T> OrchestraFieldState<T> for Init<T> {}
-			impl<T> OrchestraFieldState<T> for Missing<T> {}
-
-			impl<T> ::std::default::Default for Missing<T> {
-				fn default() -> Self {
-					Missing::<T>(::core::marker::PhantomData::<T>::default())
-				}
-			}
-	});
-	ts.extend(impl_task_kind(info));
+	ts.extend(baggage_specific_setters);
+	ts.extend(subsystem_specific_setters);
 	ts
 }
 
