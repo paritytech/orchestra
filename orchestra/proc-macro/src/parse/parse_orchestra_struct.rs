@@ -585,17 +585,6 @@ impl OrchestraInfo {
 			.collect_vec()
 	}
 
-	pub(crate) fn feature_gates_inverted(&self) -> Vec<TokenStream> {
-		self.subsystems
-			.iter()
-			.map(|s| {
-				s.feature_guard
-					.clone()
-					.map_or(quote! {}, |fg| quote! { #[cfg(not(feature = #fg))] })
-			})
-			.collect::<Vec<_>>()
-	}
-
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
 		self.subsystems
 			.iter()
@@ -673,22 +662,6 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn message_channel_capacities_without_wip(
-		&self,
-		default_capacity: usize,
-	) -> Vec<LitInt> {
-		self.subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| {
-				LitInt::new(
-					&(ssf.message_capacity.unwrap_or(default_capacity).to_string()),
-					ssf.message_capacity.span(),
-				)
-			})
-			.collect::<Vec<_>>()
-	}
-
 	pub(crate) fn message_channel_capacities_without_wip2(
 		&self,
 		default_capacity: usize,
@@ -706,28 +679,12 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn signal_channel_capacities_without_wip(
-		&self,
-		default_capacity: usize,
-	) -> Vec<LitInt> {
-		self.subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| {
-				LitInt::new(
-					&(ssf.signal_capacity.unwrap_or(default_capacity).to_string()),
-					ssf.signal_capacity.span(),
-				)
-			})
-			.collect::<Vec<_>>()
-	}
-
 	pub(crate) fn signal_channel_capacities_without_wip2(
 		&self,
 		default_capacity: usize,
 		subsystems: &Vec<SubSysField>,
 	) -> Vec<LitInt> {
-		self.subsystems
+		subsystems
 			.iter()
 			.filter(|ssf| !ssf.wip)
 			.map(|ssf| {
