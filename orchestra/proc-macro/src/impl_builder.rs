@@ -165,8 +165,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 			// Create the field init `fn`
 			quote! {
-
-				#feature_guard
+				#cfg_guard
 				impl <InitStateSpawner, #field_type, #( #impl_subsystem_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				#builder <InitStateSpawner, #( #current_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				where
@@ -221,7 +220,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				}
 
 				#[allow(clippy::type_complexity)]
-				#feature_guard
+				#cfg_guard
 				impl <InitStateSpawner, #field_type, #( #impl_subsystem_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				#builder <InitStateSpawner, #( #post_setter_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 				where
@@ -283,6 +282,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		// Baggage can also be generic, so we need to include that to a signature
 		let preserved_baggage_generics = &bag_field.generic_types;
 		quote! {
+			#cfg_guard
 			impl <InitStateSpawner, #( #preserved_baggage_generics, )* #( #subsystem_passthrough_state_generics, )* #( #impl_baggage_state_generics, )* >
 			#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #pre_setter_generics, )* >
 			{
@@ -307,6 +307,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				}
 			}
 
+			#cfg_guard
 			impl <InitStateSpawner, #( #preserved_baggage_generics, )* #( #subsystem_passthrough_state_generics, )* #( #impl_baggage_state_generics, )* >
 			#builder <InitStateSpawner, #( #subsystem_passthrough_state_generics, )* #( #post_setter_generics, )* > {
 				/// Specify the baggage in the builder when it has been previously initialized
@@ -362,16 +363,13 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			});
 
 		ts.extend(quote! {
-
-			#(
-				#powerset_cfgs
-				struct Bla;
-			)*
-
+			//TODO skunert from here
 			/// Convenience alias.
+			#cfg_guard
 			type SubsystemInitFn<T> = Box<dyn FnOnce(#handle) -> ::std::result::Result<T, #error_ty> + Send + 'static>;
 
 			/// Type for the initialized field of the orchestra builder
+			#cfg_guard
 			pub enum Init<T> {
 				/// Defer initialization to a point where the `handle` is available.
 				Fn(SubsystemInitFn<T>),
@@ -384,20 +382,27 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			/// builder, e.g. to avoid specifying the generics when instantiating
 			/// the `FooBuilder` when calling `Foo::builder()`
 			#[derive(Debug)]
+			#cfg_guard
 			pub struct Missing<T>(::core::marker::PhantomData<T>);
 
 			/// Trait used to mark fields status in a builder
+			#cfg_guard
 			trait OrchestraFieldState<T> {}
 
+			#cfg_guard
 			impl<T> OrchestraFieldState<T> for Init<T> {}
+			#cfg_guard
 			impl<T> OrchestraFieldState<T> for Missing<T> {}
 
+			#cfg_guard
 			impl<T> ::std::default::Default for Missing<T> {
 				fn default() -> Self {
 					Missing::<T>(::core::marker::PhantomData::<T>::default())
 				}
 			}
+			//TODO skunert to here
 
+			#cfg_guard
 			impl<S #(, #baggage_generic_ty )*> #orchestra_name <S #(, #baggage_generic_ty)*>
 			where
 				#spawner_where_clause,
@@ -416,9 +421,11 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 		ts.extend(quote! {
 			/// Handle for an orchestra.
+			#cfg_guard
 			pub type #handle = #support_crate ::metered::MeteredSender< #event >;
 
 			/// External connector.
+			#cfg_guard
 			pub struct #connector {
 				/// Publicly accessible handle, to be used for setting up
 				/// components that are _not_ subsystems but access is needed
@@ -430,6 +437,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				consumer: #support_crate ::metered::MeteredReceiver < #event >,
 			}
 
+			#cfg_guard
 			impl #connector {
 				/// Obtain access to the orchestra handle.
 				pub fn as_handle_mut(&mut self) -> &mut #handle {
@@ -457,6 +465,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				}
 			}
 
+			#cfg_guard
 			impl ::std::default::Default for #connector {
 				fn default() -> Self {
 					Self::with_event_capacity(SIGNAL_CHANNEL_CAPACITY)
@@ -487,6 +496,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 		ts.extend(quote! {
 			#[allow(clippy::type_complexity)]
+			#cfg_guard
 			impl<#initialized_builder_generics> #builder<Missing<S>, #( Missing<#field_type>, )*>
 			{
 				/// Create a new builder pattern, with all fields being uninitialized.
@@ -515,6 +525,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		// Spawner setter
 		ts.extend(quote!{
 		#[allow(clippy::type_complexity)]
+		#cfg_guard
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 			#builder<Missing<S>, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		where
@@ -543,6 +554,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		// message and signal channel capacity
 		ts.extend(quote! {
 		#[allow(clippy::type_complexity)]
+		#cfg_guard
 		impl<S, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 			#builder<Init<S>, #( #subsystem_passthrough_state_generics, )* #( #baggage_passthrough_state_generics, )*>
 		where
@@ -576,9 +588,11 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 		ts.extend(quote! {
 		/// Type used to represent a builder where all fields are initialized and the orchestra could be constructed.
+		#cfg_guard
 		pub type #initialized_builder<#initialized_builder_generics> = #builder<Init<S>, #( Init<#field_type>, )*>;
 
 		// A builder specialization where all fields are set
+		#cfg_guard
 		impl<#initialized_builder_generics> #initialized_builder<#initialized_builder_generics>
 		where
 			#spawner_where_clause,
@@ -712,8 +726,9 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 		ts.extend(baggage_specific_setters);
 		ts.extend(subsystem_specific_setters);
-		ts.extend(impl_task_kind(info));
 	}
+
+	ts.extend(impl_task_kind(info));
 	ts
 }
 
