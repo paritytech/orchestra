@@ -466,6 +466,7 @@ version = "0.2.0"
 dependencies = [
  "assert_matches",
  "expander",
+ "indexmap",
  "itertools",
  "orchestra",
  "petgraph",
