@@ -487,8 +487,6 @@ pub(crate) struct OrchestraInfo {
 pub struct SubsystemConfigSet {
 	/// These subsystems should be enabled for this config set
 	pub enabled_subsystems: Vec<SubSysField>,
-	/// These sbusystems should be disabled for this config set
-	pub disabled_subsystems: Vec<SubSysField>,
 
 	pub guard: TokenStream,
 }
@@ -532,41 +530,34 @@ impl OrchestraInfo {
 	}
 
 	pub(crate) fn feature_gates_complete(&self) -> Vec<SubsystemConfigSet> {
-		let subsystems_with_features = self
-			.subsystems
-			.clone()
-			.into_iter()
-			.filter(|s| s.feature_guard.is_some())
-			.collect_vec();
+		let (with_features, without_features): (Vec<_>, Vec<_>) =
+			self.subsystems.clone().into_iter().partition(|s| s.feature_guard.is_some());
 
-		let subsystems_without_features = self
-			.subsystems
-			.clone()
-			.into_iter()
-			.filter(|s| s.feature_guard.is_none())
+		let feature_list = with_features
+			.iter()
+			.filter_map(|s| s.feature_guard.clone())
+			.dedup()
 			.collect_vec();
+		let feature_mapped_subsystems =
+			with_features.into_iter().fold(HashMap::new(), |mut acc, s| {
+				let feature_guard =
+					s.feature_guard.clone().expect("This collection has features; qed");
+				let entry = acc.entry(feature_guard).or_insert(vec![]);
+				entry.push(s.clone());
+				acc
+			});
 
-		let subsystem_with_features_powerset =
-			subsystems_with_features.clone().into_iter().powerset().collect_vec();
-		let mut subsystem_with_features_inverse_powerset = subsystem_with_features_powerset.clone();
+		let features_raw_powerset = feature_list.into_iter().powerset().collect_vec();
+		let mut subsystem_with_features_inverse_powerset = features_raw_powerset.clone();
 		subsystem_with_features_inverse_powerset.reverse();
 
-		subsystem_with_features_powerset
+		features_raw_powerset
 			.into_iter()
 			.zip(subsystem_with_features_inverse_powerset)
-			.map(|(mut enabled, disabled)| {
-				//TODO SKUNERT remove unwrap here
-				let enabled_configs = enabled
-					.iter()
-					.map(|field| field.feature_guard.clone().unwrap())
-					.map(|s| quote! {feature = #s})
-					.collect_vec();
-				let disabled_configs = disabled
-					.iter()
-					.map(|field| field.feature_guard.clone().unwrap())
-					.map(|s| quote! {feature = #s})
-					.collect_vec();
-				let ts = if disabled.is_empty() {
+			.map(|(enabled, disabled)| {
+				let enabled_configs = enabled.iter().map(|s| quote! {feature = #s}).collect_vec();
+				let disabled_configs = disabled.iter().map(|s| quote! {feature = #s}).collect_vec();
+				let guard = if disabled.is_empty() {
 					quote! {
 						#[cfg(all(#(#enabled_configs,)*))]
 					}
@@ -575,12 +566,28 @@ impl OrchestraInfo {
 						#[cfg(all(#(#enabled_configs,)* not(any(#(#disabled_configs,)*))))]
 					}
 				};
-				enabled.extend(subsystems_without_features.clone());
-				SubsystemConfigSet {
-					enabled_subsystems: enabled,
-					disabled_subsystems: disabled,
-					guard: ts,
-				}
+				let enabled = self
+					.subsystems
+					.clone()
+					.into_iter()
+					.filter(|subsys| {
+						if subsys.feature_guard.is_none() {
+							return true
+						}
+
+						if let Some(raw) = &subsys.feature_guard {
+							enabled.contains(raw)
+						} else {
+							false
+						}
+					})
+					.collect_vec();
+				// let mut enabled = enabled
+				// 	.iter()
+				// 	.flat_map(|feature| feature_mapped_subsystems.get(feature).unwrap().clone())
+				// 	.collect_vec();
+				// enabled.extend(without_features.clone());
+				SubsystemConfigSet { enabled_subsystems: enabled, guard }
 			})
 			.collect_vec()
 	}
