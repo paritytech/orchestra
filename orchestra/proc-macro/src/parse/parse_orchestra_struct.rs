@@ -19,6 +19,7 @@ use std::collections::{hash_map::RandomState, HashMap, HashSet};
 use syn::{
 	parenthesized,
 	parse::{Parse, ParseStream},
+	parse2,
 	punctuated::Punctuated,
 	spanned::Spanned,
 	token,
@@ -36,7 +37,6 @@ mod kw {
 	syn::custom_keyword!(sends);
 	syn::custom_keyword!(message_capacity);
 	syn::custom_keyword!(signal_capacity);
-	syn::custom_keyword!(cfg);
 }
 
 #[derive(Clone, Debug)]
@@ -55,7 +55,6 @@ pub(crate) enum SubSysAttrItem {
 	MessageChannelCapacity(ChannelCapacity<kw::message_capacity>),
 	/// Custom signal channels capacity for this subsystem
 	SignalChannelCapacity(ChannelCapacity<kw::signal_capacity>),
-	FeatureGuard(FeatureGuard),
 }
 
 impl Parse for SubSysAttrItem {
@@ -71,8 +70,6 @@ impl Parse for SubSysAttrItem {
 			Self::MessageChannelCapacity(input.parse::<ChannelCapacity<kw::message_capacity>>()?)
 		} else if lookahead.peek(kw::signal_capacity) {
 			Self::SignalChannelCapacity(input.parse::<ChannelCapacity<kw::signal_capacity>>()?)
-		} else if lookahead.peek(kw::cfg) {
-			Self::FeatureGuard(input.parse::<FeatureGuard>()?)
 		} else {
 			Self::Consumes(input.parse::<Consumes>()?)
 		})
@@ -98,9 +95,6 @@ impl ToTokens for SubSysAttrItem {
 				quote! {}
 			},
 			Self::SignalChannelCapacity(_) => {
-				quote! {}
-			},
-			Self::FeatureGuard(_) => {
 				quote! {}
 			},
 		};
@@ -134,7 +128,7 @@ pub struct SubSysField {
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
 
-	pub(crate) feature_guard: Option<String>,
+	pub(crate) feature_guard: Option<TokenStream>,
 }
 
 impl SubSysField {
@@ -296,34 +290,6 @@ impl Parse for Sends {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FeatureGuard {
-	#[allow(dead_code)]
-	pub(crate) keyword_feature_guard: Option<kw::cfg>,
-	#[allow(dead_code)]
-	pub(crate) colon: Option<Token![:]>,
-	pub(crate) feature_name: String,
-}
-
-impl Parse for FeatureGuard {
-	fn parse(input: syn::parse::ParseStream) -> Result<Self> {
-		let lookahead = input.lookahead1();
-		Ok(if lookahead.peek(kw::cfg) {
-			Self {
-				keyword_feature_guard: Some(input.parse()?),
-				colon: input.parse()?,
-				feature_name: input.parse::<LitStr>()?.value(),
-			}
-		} else {
-			Self {
-				keyword_feature_guard: None,
-				colon: None,
-				feature_name: input.parse::<LitStr>()?.value(),
-			}
-		})
-	}
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct Consumes {
 	#[allow(dead_code)]
 	pub(crate) keyword_consumes: Option<kw::consumes>,
@@ -383,7 +349,20 @@ pub(crate) struct SubSystemAttrItems {
 	pub(crate) message_capacity: Option<ChannelCapacity<kw::message_capacity>>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<ChannelCapacity<kw::signal_capacity>>,
-	pub(crate) feature_guard: Option<FeatureGuard>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CfgAttrItems {
+	pub(crate) items: TokenStream,
+}
+
+impl Parse for CfgAttrItems {
+	fn parse(input: ParseStream) -> Result<Self> {
+		let content;
+		let _paren_token = parenthesized!(content in input);
+
+		Ok(Self { items: content.parse()? })
+	}
 }
 
 impl Parse for SubSystemAttrItems {
@@ -425,17 +404,8 @@ impl Parse for SubSystemAttrItems {
 		let wip = extract_variant!(unique, Wip; default = false);
 		let message_capacity = extract_variant!(unique, MessageChannelCapacity take );
 		let signal_capacity = extract_variant!(unique, SignalChannelCapacity take );
-		let feature_guard = extract_variant!(unique, FeatureGuard take );
 
-		Ok(Self {
-			blocking,
-			wip,
-			sends,
-			consumes,
-			message_capacity,
-			signal_capacity,
-			feature_guard,
-		})
+		Ok(Self { blocking, wip, sends, consumes, message_capacity, signal_capacity })
 	}
 }
 
@@ -523,9 +493,7 @@ impl OrchestraInfo {
 	pub(crate) fn feature_gates(&self) -> Vec<TokenStream> {
 		self.subsystems
 			.iter()
-			.map(|s| {
-				s.feature_guard.clone().map_or(quote! {}, |fg| quote! { #[cfg(feature = #fg)] })
-			})
+			.map(|s| s.feature_guard.clone().map_or(quote! {}, |fg| quote! { #[cfg(#fg)] }))
 			.collect::<Vec<_>>()
 	}
 
@@ -536,16 +504,16 @@ impl OrchestraInfo {
 		let feature_list = with_features
 			.iter()
 			.filter_map(|s| s.feature_guard.clone())
-			.dedup()
+			.dedup_by(|s1, s2| {
+				if s1.to_string() == s2.to_string() {
+					eprintln!("{} == {}", s1.to_string(), s2.to_string());
+					true
+				} else {
+					eprintln!("{} != {}", s1.to_string(), s2.to_string());
+					false
+				}
+			})
 			.collect_vec();
-		let feature_mapped_subsystems =
-			with_features.into_iter().fold(HashMap::new(), |mut acc, s| {
-				let feature_guard =
-					s.feature_guard.clone().expect("This collection has features; qed");
-				let entry = acc.entry(feature_guard).or_insert(vec![]);
-				entry.push(s.clone());
-				acc
-			});
 
 		let features_raw_powerset = feature_list.into_iter().powerset().collect_vec();
 		let mut subsystem_with_features_inverse_powerset = features_raw_powerset.clone();
@@ -555,15 +523,15 @@ impl OrchestraInfo {
 			.into_iter()
 			.zip(subsystem_with_features_inverse_powerset)
 			.map(|(enabled, disabled)| {
-				let enabled_configs = enabled.iter().map(|s| quote! {feature = #s}).collect_vec();
-				let disabled_configs = disabled.iter().map(|s| quote! {feature = #s}).collect_vec();
+				let enabled_comparable =
+					enabled.clone().iter().map(|e| e.to_string()).collect_vec();
 				let guard = if disabled.is_empty() {
 					quote! {
-						#[cfg(all(#(#enabled_configs,)*))]
+						#[cfg(all(#(#enabled,)*))]
 					}
 				} else {
 					quote! {
-						#[cfg(all(#(#enabled_configs,)* not(any(#(#disabled_configs,)*))))]
+						#[cfg(all(#(#enabled,)* not(any(#(#disabled,)*))))]
 					}
 				};
 				let enabled = self
@@ -576,17 +544,12 @@ impl OrchestraInfo {
 						}
 
 						if let Some(raw) = &subsys.feature_guard {
-							enabled.contains(raw)
+							enabled_comparable.contains(&raw.to_string())
 						} else {
 							false
 						}
 					})
 					.collect_vec();
-				// let mut enabled = enabled
-				// 	.iter()
-				// 	.flat_map(|feature| feature_mapped_subsystems.get(feature).unwrap().clone())
-				// 	.collect_vec();
-				// enabled.extend(without_features.clone());
 				SubsystemConfigSet { enabled_subsystems: enabled, guard }
 			})
 			.collect_vec()
@@ -752,12 +715,37 @@ impl OrchestraGuts {
 						(attr_tokens, span)
 					})
 				});
+
+			let mut cfg_attr =
+				attrs.iter().filter(|attr| attr.style == AttrStyle::Outer).filter_map(|attr| {
+					let span = attr.path.span();
+					attr.path.get_ident().filter(|ident| *ident == "cfg").map(move |_ident| {
+						let attr_tokens = attr.tokens.clone();
+
+						(attr_tokens, span)
+					})
+				});
+
 			let ident = ident.ok_or_else(|| {
 				Error::new(
 					ty.span(),
 					"Missing identifier for field, only named fields are expected.",
 				)
 			})?;
+
+			let config = if let Some((attr_tokens, span)) = cfg_attr.next() {
+				// a `#[subsystem(..)]` annotation exists
+				if let Some((_attr_tokens2, span2)) = cfg_attr.next() {
+					return Err({
+						let mut err = Error::new(span, "The first subsystem annotation is at");
+						err.combine(Error::new(span2, "but another here for the same field."));
+						err
+					})
+				}
+				Some(attr_tokens)
+			} else {
+				None
+			};
 
 			if let Some((attr_tokens, span)) = subsystem_attr.next() {
 				// a `#[subsystem(..)]` annotation exists
@@ -799,7 +787,6 @@ impl OrchestraGuts {
 					sends,
 					message_capacity,
 					signal_capacity,
-					feature_guard,
 					..
 				} = subsystem_attrs;
 
@@ -813,6 +800,16 @@ impl OrchestraGuts {
 				let message_capacity = message_capacity.map(|capacity| capacity.value);
 				let signal_capacity = signal_capacity.map(|capacity| capacity.value);
 
+				let inner_config = if let Some(tokens) = config {
+					eprintln!("TokenStream {}", tokens);
+					Some(syn::parse2::<CfgAttrItems>(tokens)?.items)
+				} else {
+					None
+				};
+				if let Some(inner) = &inner_config {
+					eprintln!("TokenStream processed {}", inner);
+				}
+
 				subsystems.push(SubSysField {
 					name: ident,
 					generic,
@@ -822,7 +819,7 @@ impl OrchestraGuts {
 					blocking,
 					message_capacity,
 					signal_capacity,
-					feature_guard: feature_guard.map(|feature| feature.feature_name),
+					feature_guard: inner_config,
 				});
 			} else {
 				// collect the "baggage"
