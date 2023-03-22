@@ -527,11 +527,11 @@ impl OrchestraInfo {
 					enabled.clone().iter().map(|e| e.to_string()).collect_vec();
 				let guard = if disabled.is_empty() {
 					quote! {
-						#[cfg(all(#(#enabled,)*))]
+						#[cfg(all(#(#enabled),*))]
 					}
 				} else {
 					quote! {
-						#[cfg(all(#(#enabled,)* not(any(#(#disabled,)*))))]
+						#[cfg(all(#(#enabled,)* not(any(#(#disabled),*))))]
 					}
 				};
 				let enabled = self
