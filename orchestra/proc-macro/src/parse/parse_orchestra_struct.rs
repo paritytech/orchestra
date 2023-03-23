@@ -128,7 +128,7 @@ pub struct SubSysField {
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
 
-	pub(crate) feature_guard: Option<TokenStream>,
+	pub(crate) feature_gates: Option<TokenStream>,
 }
 
 impl SubSysField {
@@ -493,17 +493,17 @@ impl OrchestraInfo {
 	pub(crate) fn feature_gates(&self) -> Vec<TokenStream> {
 		self.subsystems
 			.iter()
-			.map(|s| s.feature_guard.clone().map_or(quote! {}, |fg| quote! { #[cfg(#fg)] }))
+			.map(|s| s.feature_gates.clone().map_or(quote! {}, |fg| quote! { #[cfg(#fg)] }))
 			.collect::<Vec<_>>()
 	}
 
 	pub(crate) fn feature_gates_complete(&self) -> Vec<SubsystemConfigSet> {
 		let (with_features, without_features): (Vec<_>, Vec<_>) =
-			self.subsystems.clone().into_iter().partition(|s| s.feature_guard.is_some());
+			self.subsystems.clone().into_iter().partition(|s| s.feature_gates.is_some());
 
 		let feature_list = with_features
 			.iter()
-			.filter_map(|s| s.feature_guard.clone())
+			.filter_map(|s| s.feature_gates.clone())
 			.dedup_by(|s1, s2| {
 				if s1.to_string() == s2.to_string() {
 					eprintln!("{} == {}", s1.to_string(), s2.to_string());
@@ -539,11 +539,11 @@ impl OrchestraInfo {
 					.clone()
 					.into_iter()
 					.filter(|subsys| {
-						if subsys.feature_guard.is_none() {
+						if subsys.feature_gates.is_none() {
 							return true
 						}
 
-						if let Some(raw) = &subsys.feature_guard {
+						if let Some(raw) = &subsys.feature_gates {
 							enabled_comparable.contains(&raw.to_string())
 						} else {
 							false
@@ -733,8 +733,8 @@ impl OrchestraGuts {
 				)
 			})?;
 
-			let config = if let Some((attr_tokens, span)) = cfg_attr.next() {
-				// a `#[subsystem(..)]` annotation exists
+			let feature_gates = if let Some((attr_tokens, span)) = cfg_attr.next() {
+				// multiple `#[cfg(..)]` found
 				if let Some((_attr_tokens2, span2)) = cfg_attr.next() {
 					return Err({
 						let mut err = Error::new(span, "The first subsystem annotation is at");
@@ -742,7 +742,10 @@ impl OrchestraGuts {
 						err
 					})
 				}
-				Some(attr_tokens)
+
+				// Extract the inner condition without parenthesis
+				// #[cfg(feature = "feature")] -> feature = "feature"
+				Some(syn::parse2::<CfgAttrItems>(attr_tokens)?.items)
 			} else {
 				None
 			};
@@ -800,16 +803,6 @@ impl OrchestraGuts {
 				let message_capacity = message_capacity.map(|capacity| capacity.value);
 				let signal_capacity = signal_capacity.map(|capacity| capacity.value);
 
-				let inner_config = if let Some(tokens) = config {
-					eprintln!("TokenStream {}", tokens);
-					Some(syn::parse2::<CfgAttrItems>(tokens)?.items)
-				} else {
-					None
-				};
-				if let Some(inner) = &inner_config {
-					eprintln!("TokenStream processed {}", inner);
-				}
-
 				subsystems.push(SubSysField {
 					name: ident,
 					generic,
@@ -819,7 +812,7 @@ impl OrchestraGuts {
 					blocking,
 					message_capacity,
 					signal_capacity,
-					feature_guard: inner_config,
+					feature_gates,
 				});
 			} else {
 				// collect the "baggage"
