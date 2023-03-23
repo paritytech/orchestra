@@ -13,10 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::parse_cfg::*;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
+use quote::{quote, ToTokens};
 use std::collections::{hash_map::RandomState, HashMap, HashSet};
 use syn::{
+	ext::IdentExt,
 	parenthesized,
 	parse::{Parse, ParseStream},
 	parse2,
@@ -27,8 +30,6 @@ use syn::{
 	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, LitStr, Path,
 	PathSegment, Result, Token, Type, Visibility,
 };
-
-use quote::{quote, ToTokens};
 
 mod kw {
 	syn::custom_keyword!(wip);
@@ -693,10 +694,18 @@ impl OrchestraGuts {
 						err
 					})
 				}
+				let items = syn::parse2::<CfgAttrItems>(attr_tokens.clone())?.items;
+				let _test = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
+				let bla = items.clone();
 
+				// eprintln!("======Attr: {}", bla.to_string());
+				// bla.into_iter().for_each(|item| {
+				// 	eprintln!("String: {item}");
+				// 	eprintln!("Item: {item:?}");
+				// });
 				// Extract the inner condition without parenthesis
 				// #[cfg(feature = "feature")] -> feature = "feature"
-				Some(syn::parse2::<CfgAttrItems>(attr_tokens)?.items)
+				Some(items)
 			} else {
 				None
 			};

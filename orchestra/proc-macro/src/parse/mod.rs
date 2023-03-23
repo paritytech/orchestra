@@ -24,7 +24,7 @@ mod kw {
 	syn::custom_keyword!(subsystem);
 	syn::custom_keyword!(prefix);
 }
-
+mod parse_cfg;
 mod parse_orchestra_attr;
 mod parse_orchestra_struct;
 
