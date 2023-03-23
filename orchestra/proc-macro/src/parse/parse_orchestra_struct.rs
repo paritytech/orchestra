@@ -461,6 +461,41 @@ pub struct SubsystemConfigSet {
 	pub guard: TokenStream,
 }
 
+impl SubsystemConfigSet {
+	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
+		subsystem_names_without_wip(&self.enabled_subsystems)
+	}
+
+	pub(crate) fn subsystem_generic_types(&self) -> Vec<Ident> {
+		subsystem_generic_types(&self.enabled_subsystems)
+	}
+
+	pub(crate) fn channel_names_without_wip(
+		&self,
+		suffix: impl Into<Option<&'static str>>,
+	) -> Vec<Ident> {
+		channel_names_without_wip(&self.enabled_subsystems, suffix)
+	}
+
+	pub(crate) fn consumes_without_wip(&self) -> Vec<Path> {
+		consumes_without_wip(&self.enabled_subsystems)
+	}
+
+	pub(crate) fn message_channel_capacities_without_wip(
+		&self,
+		default_capacity: usize,
+	) -> Vec<LitInt> {
+		message_channel_capacities_without_wip(&self.enabled_subsystems, default_capacity)
+	}
+
+	pub(crate) fn signal_channel_capacities_without_wip(
+		&self,
+		default_capacity: usize,
+	) -> Vec<LitInt> {
+		signal_channel_capacities_without_wip(&self.enabled_subsystems, default_capacity)
+	}
+}
+
 impl OrchestraInfo {
 	pub(crate) fn support_crate_name(&self) -> &Path {
 		&self.support_crate
@@ -556,27 +591,7 @@ impl OrchestraInfo {
 	}
 
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
-		self.subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| ssf.name.clone())
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn subsystem_names_without_wip2(&self, subsystems: &Vec<SubSysField>) -> Vec<Ident> {
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| ssf.name.clone())
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn subsystem_generic_types2(&self, subsystems: &Vec<SubSysField>) -> Vec<Ident> {
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|sff| sff.generic.clone())
-			.collect::<Vec<_>>()
+		subsystem_names_without_wip(&self.subsystems)
 	}
 
 	pub(crate) fn baggage(&self) -> &[BaggageField] {
@@ -611,75 +626,11 @@ impl OrchestraInfo {
 		&self,
 		suffix: impl Into<Option<&'static str>>,
 	) -> Vec<Ident> {
-		let suffix = suffix.into().unwrap_or("");
-		self.subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| Ident::new(&(ssf.name.to_string() + suffix), ssf.name.span()))
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn channel_names_without_wip2(
-		&self,
-		suffix: impl Into<Option<&'static str>>,
-		subsystems: &Vec<SubSysField>,
-	) -> Vec<Ident> {
-		let suffix = suffix.into().unwrap_or("");
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| Ident::new(&(ssf.name.to_string() + suffix), ssf.name.span()))
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn message_channel_capacities_without_wip2(
-		&self,
-		default_capacity: usize,
-		subsystems: &Vec<SubSysField>,
-	) -> Vec<LitInt> {
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| {
-				LitInt::new(
-					&(ssf.message_capacity.unwrap_or(default_capacity).to_string()),
-					ssf.message_capacity.span(),
-				)
-			})
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn signal_channel_capacities_without_wip2(
-		&self,
-		default_capacity: usize,
-		subsystems: &Vec<SubSysField>,
-	) -> Vec<LitInt> {
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| {
-				LitInt::new(
-					&(ssf.signal_capacity.unwrap_or(default_capacity).to_string()),
-					ssf.signal_capacity.span(),
-				)
-			})
-			.collect::<Vec<_>>()
+		channel_names_without_wip(&self.subsystems, suffix)
 	}
 
 	pub(crate) fn consumes_without_wip(&self) -> Vec<Path> {
-		self.subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| ssf.message_to_consume())
-			.collect::<Vec<_>>()
-	}
-
-	pub(crate) fn consumes_without_wip2(&self, subsystems: &Vec<SubSysField>) -> Vec<Path> {
-		subsystems
-			.iter()
-			.filter(|ssf| !ssf.wip)
-			.map(|ssf| ssf.message_to_consume())
-			.collect::<Vec<_>>()
+		consumes_without_wip(&self.subsystems)
 	}
 }
 
@@ -870,4 +821,72 @@ impl Parse for OrchestraGuts {
 			)),
 		}
 	}
+}
+
+pub(crate) fn subsystem_names_without_wip(subsystems: &Vec<SubSysField>) -> Vec<Ident> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| ssf.name.clone())
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn subsystem_generic_types(subsystems: &Vec<SubSysField>) -> Vec<Ident> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|sff| sff.generic.clone())
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn channel_names_without_wip(
+	subsystems: &Vec<SubSysField>,
+	suffix: impl Into<Option<&'static str>>,
+) -> Vec<Ident> {
+	let suffix = suffix.into().unwrap_or("");
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| Ident::new(&(ssf.name.to_string() + suffix), ssf.name.span()))
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn message_channel_capacities_without_wip(
+	subsystems: &Vec<SubSysField>,
+	default_capacity: usize,
+) -> Vec<LitInt> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| {
+			LitInt::new(
+				&(ssf.message_capacity.unwrap_or(default_capacity).to_string()),
+				ssf.message_capacity.span(),
+			)
+		})
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn signal_channel_capacities_without_wip(
+	subsystems: &Vec<SubSysField>,
+	default_capacity: usize,
+) -> Vec<LitInt> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| {
+			LitInt::new(
+				&(ssf.signal_capacity.unwrap_or(default_capacity).to_string()),
+				ssf.signal_capacity.span(),
+			)
+		})
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn consumes_without_wip(subsystems: &Vec<SubSysField>) -> Vec<Path> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| ssf.message_to_consume())
+		.collect::<Vec<_>>()
 }

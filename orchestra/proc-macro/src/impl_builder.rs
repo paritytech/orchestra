@@ -154,29 +154,22 @@ pub(crate) fn impl_feature_guarded_items(
 ) -> proc_macro2::TokenStream {
 	let mut ts = quote! {};
 
-	let cfg_guard = cfg_set.guard.clone();
-	let subsystem_name = &info.subsystem_names_without_wip2(&cfg_set.enabled_subsystems);
-	let subsystem_generics = &info.subsystem_generic_types2(&cfg_set.enabled_subsystems);
-	let consumes = &info.consumes_without_wip2(&cfg_set.enabled_subsystems);
-	let channel_name = &info.channel_names_without_wip2(None, &cfg_set.enabled_subsystems);
-	let channel_name_unbounded =
-		&info.channel_names_without_wip2("_unbounded", &cfg_set.enabled_subsystems);
-	let message_channel_capacity = &info.message_channel_capacities_without_wip2(
-		info.message_channel_capacity,
-		&cfg_set.enabled_subsystems,
-	);
-	let signal_channel_capacity = &info.signal_channel_capacities_without_wip2(
-		info.signal_channel_capacity,
-		&cfg_set.enabled_subsystems,
-	);
+	let cfg_guard = &cfg_set.guard.clone();
+	let subsystem_name = &cfg_set.subsystem_names_without_wip();
+	let subsystem_generics = &cfg_set.subsystem_generic_types();
+	let consumes = &cfg_set.consumes_without_wip();
+	let channel_name = &cfg_set.channel_names_without_wip(None);
+	let channel_name_unbounded = &cfg_set.channel_names_without_wip("_unbounded");
+	let message_channel_capacity =
+		&cfg_set.message_channel_capacities_without_wip(info.message_channel_capacity);
+	let signal_channel_capacity =
+		&cfg_set.signal_channel_capacities_without_wip(info.signal_channel_capacity);
 
-	let channel_name_tx = &info.channel_names_without_wip2("_tx", &cfg_set.enabled_subsystems);
-	let channel_name_unbounded_tx =
-		&info.channel_names_without_wip2("_unbounded_tx", &cfg_set.enabled_subsystems);
+	let channel_name_tx = &cfg_set.channel_names_without_wip("_tx");
+	let channel_name_unbounded_tx = &cfg_set.channel_names_without_wip("_unbounded_tx");
 
-	let channel_name_rx = &info.channel_names_without_wip2("_rx", &cfg_set.enabled_subsystems);
-	let channel_name_unbounded_rx =
-		&info.channel_names_without_wip2("_unbounded_rx", &cfg_set.enabled_subsystems);
+	let channel_name_rx = &cfg_set.channel_names_without_wip("_rx");
+	let channel_name_unbounded_rx = &info.channel_names_without_wip("_unbounded_rx");
 
 	let baggage_name = &info.baggage_names();
 	let baggage_generic_ty = &info.baggage_generic_types();
