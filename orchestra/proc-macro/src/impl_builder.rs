@@ -36,7 +36,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let handle = format_ident!("{}Handle", orchestra_name);
 	let connector = format_ident!("{}Connector", orchestra_name);
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
-	let feature_powerset_cfgs = &info.feature_gates_complete();
+	let feature_powerset_cfgs = &info.feature_gated_subsystem_sets();
 
 	let mut ts = quote! {};
 
@@ -154,7 +154,7 @@ pub(crate) fn impl_feature_guarded_items(
 ) -> proc_macro2::TokenStream {
 	let mut ts = quote! {};
 
-	let cfg_guard = &cfg_set.guard.clone();
+	let cfg_guard = &cfg_set.feature_gate.clone();
 	let subsystem_name = &cfg_set.subsystem_names_without_wip();
 	let subsystem_generics = &cfg_set.subsystem_generic_types();
 	let consumes = &cfg_set.consumes_without_wip();

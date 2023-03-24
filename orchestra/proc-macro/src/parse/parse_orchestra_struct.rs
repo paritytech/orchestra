@@ -19,15 +19,13 @@ use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::collections::{hash_map::RandomState, HashMap, HashSet};
 use syn::{
-	ext::IdentExt,
 	parenthesized,
 	parse::{Parse, ParseStream},
-	parse2,
 	punctuated::Punctuated,
 	spanned::Spanned,
 	token,
 	token::Bracket,
-	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, LitStr, Path,
+	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, Path,
 	PathSegment, Result, Token, Type, Visibility,
 };
 
@@ -352,20 +350,6 @@ pub(crate) struct SubSystemAttrItems {
 	pub(crate) signal_capacity: Option<ChannelCapacity<kw::signal_capacity>>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct CfgAttrItems {
-	pub(crate) items: TokenStream,
-}
-
-impl Parse for CfgAttrItems {
-	fn parse(input: ParseStream) -> Result<Self> {
-		let content;
-		let _paren_token = parenthesized!(content in input);
-
-		Ok(Self { items: content.parse()? })
-	}
-}
-
 impl Parse for SubSystemAttrItems {
 	fn parse(input: syn::parse::ParseStream) -> Result<Self> {
 		let span = input.span();
@@ -459,7 +443,7 @@ pub struct SubsystemConfigSet {
 	/// These subsystems should be enabled for this config set
 	pub enabled_subsystems: Vec<SubSysField>,
 
-	pub guard: TokenStream,
+	pub feature_gate: TokenStream,
 }
 
 impl SubsystemConfigSet {
@@ -533,54 +517,44 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
-	pub(crate) fn feature_gates_complete(&self) -> Vec<SubsystemConfigSet> {
-		let (with_features, without_features): (Vec<_>, Vec<_>) =
-			self.subsystems.clone().into_iter().partition(|s| s.feature_gates.is_some());
-
-		let feature_list = with_features
+	pub(crate) fn feature_gated_subsystem_sets(&self) -> Vec<SubsystemConfigSet> {
+		let features_raw_powerset = self
+			.subsystems
 			.iter()
 			.filter_map(|s| s.feature_gates.clone())
-			.map(|mut cfg| {
-				cfg.sort_recursive();
-				cfg
-			})
 			.dedup()
+			.powerset()
 			.collect_vec();
 
-		let features_raw_powerset = feature_list.into_iter().powerset().collect_vec();
-		let mut subsystem_with_features_inverse_powerset = features_raw_powerset.clone();
-		subsystem_with_features_inverse_powerset.reverse();
-
 		features_raw_powerset
-			.into_iter()
-			.zip(subsystem_with_features_inverse_powerset)
-			.map(|(enabled, disabled)| {
-				let guard = if disabled.is_empty() {
-					quote! {
-						#[cfg(all(#(#enabled),*))]
-					}
+			.iter()
+			.zip(features_raw_powerset.iter().rev())
+			.map(|(enabled_cfgs, disabled_cfgs)| {
+				// Create tokenstream to active this specific set of feature combinations
+				let output_feature_gate = if disabled_cfgs.is_empty() {
+					quote! { #[cfg(all(#(#enabled_cfgs),*))] }
 				} else {
-					quote! {
-						#[cfg(all(#(#enabled,)* not(any(#(#disabled),*))))]
-					}
+					quote! { #[cfg(all(#(#enabled_cfgs,)* not(any(#(#disabled_cfgs),*))))] }
 				};
+
 				let enabled = self
 					.subsystems
 					.clone()
 					.into_iter()
 					.filter(|subsys| {
-						if subsys.feature_gates.is_none() {
-							return true
-						}
-
-						if let Some(raw) = &subsys.feature_gates {
-							enabled.contains(&raw)
-						} else {
-							false
-						}
+						// Subsystems without a feature gate should always be included.
+						// If they have a feature gate, check if it is part of the currently activated feature sets.
+						subsys
+							.feature_gates
+							.as_ref()
+							.map_or(true, |cfg| enabled_cfgs.contains(&cfg))
 					})
 					.collect_vec();
-				SubsystemConfigSet { enabled_subsystems: enabled, guard }
+
+				SubsystemConfigSet {
+					enabled_subsystems: enabled,
+					feature_gate: output_feature_gate,
+				}
 			})
 			.collect_vec()
 	}
@@ -688,7 +662,8 @@ impl OrchestraGuts {
 						err
 					})
 				}
-				let cfg_item = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
+				let mut cfg_item = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
+				cfg_item.sort_recursive();
 				Some(cfg_item)
 			} else {
 				None
