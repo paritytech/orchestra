@@ -145,16 +145,16 @@ mod test {
 
 	#[test]
 	fn cfg_item_sorts_and_compares_correctly() {
-		let item1: CfgItem = parse_quote! { feature = "bla1"};
-		let item2: CfgItem = parse_quote! { feature = "bla1"};
+		let item1: CfgItem = parse_quote! { feature = "f1"};
+		let item2: CfgItem = parse_quote! { feature = "f1"};
 		assert_eq!(true, item1 == item2);
 
-		let item1: CfgItem = parse_quote! { feature = "bla1"};
-		let item2: CfgItem = parse_quote! { feature = "bla2"};
+		let item1: CfgItem = parse_quote! { feature = "f1"};
+		let item2: CfgItem = parse_quote! { feature = "f2"};
 		assert_eq!(false, item1 == item2);
 		let mut item1: CfgItem = parse_quote! {
 			any(
-				all(feature = "bla1", feature = "bla2", feature = "bla3"),
+				all(feature = "f1", feature = "f2", feature = "f3"),
 				any(feature = "any1", feature = "any2"),
 				not(feature = "no")
 			)
@@ -163,7 +163,7 @@ mod test {
 			any(
 				not(feature = "no"),
 				any(feature = "any2", feature = "any1"),
-				all(feature = "bla2", feature = "bla1", feature = "bla3")
+				all(feature = "f2", feature = "f1", feature = "f3")
 			)
 		};
 		item1.sort_recursive();
@@ -177,10 +177,10 @@ mod test {
 			any(
 				not(feature = "no"),
 				any(feature = "any2", feature = "any1"),
-				all(feature = "bla2", feature = "bla1", feature = "bla3")
+				all(feature = "f2", feature = "f1", feature = "f3")
 			)
 		};
-		assert_eq!("any (not (feature = \"no\") , any (feature = \"any2\" , feature = \"any1\") , all (feature = \"bla2\" , feature = \"bla1\" , feature = \"bla3\"))"
+		assert_eq!("any (not (feature = \"no\") , any (feature = \"any2\" , feature = \"any1\") , all (feature = \"f2\" , feature = \"f1\" , feature = \"f3\"))"
 				   , to_parse.to_token_stream().to_string());
 	}
 }
