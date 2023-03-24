@@ -38,12 +38,28 @@ pub(crate) struct CfgExpressionRoot {
 	pub(crate) item: CfgItem,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum CfgItem {
 	Feature(String),
 	All(Vec<CfgItem>),
-	Not(Vec<CfgItem>),
+	Not(Box<CfgItem>),
 	Any(Vec<CfgItem>),
+}
+
+impl CfgItem {
+	pub fn sort_recursive(&mut self) {
+		match self {
+			CfgItem::All(items) => {
+				items.sort();
+				items.iter_mut().for_each(|item| item.sort_recursive());
+			},
+			CfgItem::Any(items) => {
+				items.sort();
+				items.iter_mut().for_each(|item| item.sort_recursive());
+			},
+			_ => {},
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +110,7 @@ impl Parse for Any {
 #[derive(Debug, Clone)]
 pub struct Not {
 	not: kw::not,
-	items: Punctuated<CfgItem, Token![,]>,
+	item: CfgItem,
 }
 
 impl Parse for Not {
@@ -102,8 +118,7 @@ impl Parse for Not {
 		let not = input.parse()?;
 		let content;
 		let _paren_token = parenthesized!(content in input);
-
-		Ok(Self { not, items: Punctuated::parse_terminated(&content)? })
+		Ok(Self { not, item: content.parse()? })
 	}
 }
 
@@ -121,13 +136,13 @@ impl Parse for CfgItem {
 		} else if lookahead.peek(kw::not) {
 			let not: Not = input.parse()?;
 			eprintln!("parsed not {not:?}");
-			return Ok(Self::Any(Vec::from_iter(not.items.into_iter())))
+			return Ok(Self::Not(not.item.into()))
 		} else if lookahead.peek(kw::feature) {
 			let feature: Feature = input.parse()?;
 			eprintln!("parsed feature {feature:?}");
 			return Ok(Self::Feature(feature.name.value()))
 		}
-		Err(Error::new(input.span(), "yolo"))
+		Err(Error::new(input.span(), "Unexpected item in cfg."))
 	}
 }
 
@@ -135,8 +150,71 @@ impl Parse for CfgExpressionRoot {
 	fn parse(input: ParseStream) -> Result<Self> {
 		let content;
 		let _paren_token = parenthesized!(content in input);
-		eprintln!("==============================");
 
 		Ok(Self { item: content.parse()? })
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::CfgItem::{self, *};
+	use assert_matches::assert_matches;
+	use syn::parse_quote;
+
+	fn feat(name: &str) -> CfgItem {
+		Feature(name.to_string())
+	}
+
+	#[test]
+	fn cfg_parsing_works() {
+		let cfg: CfgItem = parse_quote! {
+			feature = "f1"
+		};
+
+		assert_matches!(cfg, CfgItem::Feature(item) => {assert_eq!("f1", item)} );
+
+		let cfg: CfgItem = parse_quote! {
+			all(feature = "f1", feature = "f2", any(feature = "f3", not(feature = "f4")))
+		};
+
+		assert_matches!(cfg, All(all_items) => {
+			assert_matches!(all_items.get(0).unwrap(), CfgItem::Feature(item) => {assert_eq!("f1", item)});
+			assert_matches!(all_items.get(1).unwrap(), CfgItem::Feature(item) => {assert_eq!("f2", item)});
+			assert_matches!(all_items.get(2).unwrap(), CfgItem::Any(any_items) => {
+				assert_matches!(any_items.get(0).unwrap(), CfgItem::Feature(item) => {assert_eq!("f3", item)});
+				assert_matches!(any_items.get(1).unwrap(), CfgItem::Not(not_item) => {
+					assert_matches!(**not_item, CfgItem::Feature(ref inner) => {assert_eq!("f4", inner)})
+				});
+			});
+		});
+	}
+
+	#[test]
+	fn cfg_item_compares_correctly() {
+		let item1: CfgItem = parse_quote! { feature = "bla1"};
+		let item2: CfgItem = parse_quote! { feature = "bla1"};
+		assert_eq!(true, item1 == item2);
+
+		let item1: CfgItem = parse_quote! { feature = "bla1"};
+		let item2: CfgItem = parse_quote! { feature = "bla2"};
+		assert_eq!(false, item1 == item2);
+
+		let mut item1: CfgItem = parse_quote! {
+			any(
+				all(feature = "bla1", feature = "bla2", feature = "bla3"),
+				any(feature = "any1", feature = "any2"),
+				not(feature = "no")
+			)
+		};
+		let mut item2: CfgItem = parse_quote! {
+			any(
+				not(feature = "no"),
+				any(feature = "any2", feature = "any1"),
+				all(feature = "bla2", feature = "bla1", feature = "bla3")
+			)
+		};
+		item1.sort_recursive();
+		item2.sort_recursive();
+		assert_eq!(true, item1 == item2);
 	}
 }
