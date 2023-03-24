@@ -107,7 +107,7 @@ impl ToTokens for SubSysAttrItem {
 /// A field of the struct annotated with
 /// `#[subsystem(A, B, C)]`
 #[derive(Clone, Debug)]
-pub struct SubSysField {
+pub(crate) struct SubSysField {
 	/// Name of the field.
 	pub(crate) name: Ident,
 	/// Generate generic type name for the `AllSubsystems` type
@@ -130,7 +130,7 @@ pub struct SubSysField {
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
 
-	pub(crate) feature_gates: Option<CfgItem>,
+	pub(crate) feature_gates: Option<CfgPredicate>,
 }
 
 impl SubSysField {
@@ -441,11 +441,14 @@ pub(crate) struct OrchestraInfo {
 	pub(crate) extern_error_ty: Path,
 }
 
-pub struct SubsystemConfigSet<'a> {
-	/// These subsystems should be enabled for this config set
-	pub enabled_subsystems: Vec<&'a SubSysField>,
+/// Configuration set for builder generation.
+pub(crate) struct SubsystemConfigSet<'a> {
+	/// These subsystems should be enabled for this config set.
+	pub(crate) enabled_subsystems: Vec<&'a SubSysField>,
 
-	pub feature_gate: TokenStream,
+	/// Feature gate that is used to conditionally include
+	/// the subsystems included in `enabled_subsystems`.
+	pub(crate) feature_gate: TokenStream,
 }
 
 impl<'a> SubsystemConfigSet<'a> {
@@ -519,16 +522,24 @@ impl OrchestraInfo {
 			.collect::<Vec<_>>()
 	}
 
+	/// Generates all mutually exclusive feature combinations.
+	///	For each feature combination, finds the subsystems
+	///	that should be enabled by this combination.
 	pub(crate) fn feature_gated_subsystem_sets(&self) -> Vec<SubsystemConfigSet> {
+		// Build the powerset of all defined features.
+		// Example:
+		// [Some(f1), Some(f2), None] -> [[] [Some(f1)], [Some(f2)], [Some(f1), Some(f2)]]
 		let features_raw_powerset = self
 			.subsystems
 			.iter()
 			.filter_map(|s| s.feature_gates.clone())
+			// We assume that the feature gates are already sorted internally
 			.dedup()
 			.powerset()
 			.collect_vec();
 
-		features_raw_powerset
+		// Iterate from front and back to build mutually exclusive feature sets.
+		let res = features_raw_powerset
 			.iter()
 			.zip(features_raw_powerset.iter().rev())
 			.map(|(enabled_cfgs, disabled_cfgs)| {
@@ -557,7 +568,8 @@ impl OrchestraInfo {
 					feature_gate: output_feature_gate,
 				}
 			})
-			.collect()
+			.collect();
+		res
 	}
 
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
@@ -663,9 +675,10 @@ impl OrchestraGuts {
 						err
 					})
 				}
-				let mut cfg_item = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
-				cfg_item.sort_recursive();
-				Some(cfg_item)
+				let mut cfg_predicate = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.predicate;
+				// We sort here so we can do easy equality checks
+				cfg_predicate.sort_recursive();
+				Some(cfg_predicate)
 			} else {
 				None
 			};

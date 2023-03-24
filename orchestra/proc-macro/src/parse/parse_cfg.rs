@@ -28,9 +28,10 @@ mod kw {
 	syn::custom_keyword!(feature);
 }
 
+/// Top-level cfg expression item
 #[derive(Debug, Clone)]
 pub(crate) struct CfgExpressionRoot {
-	pub(crate) item: CfgItem,
+	pub(crate) predicate: CfgPredicate,
 }
 
 impl Parse for CfgExpressionRoot {
@@ -38,52 +39,53 @@ impl Parse for CfgExpressionRoot {
 		let content;
 		let _paren_token = parenthesized!(content in input);
 
-		Ok(Self { item: content.parse()? })
+		Ok(Self { predicate: content.parse()? })
 	}
 }
 
+/// Single cfg predicate for parsing.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
-pub enum CfgItem {
+pub(crate) enum CfgPredicate {
 	Feature(String),
-	All(Vec<CfgItem>),
-	Not(Box<CfgItem>),
-	Any(Vec<CfgItem>),
+	All(Vec<CfgPredicate>),
+	Not(Box<CfgPredicate>),
+	Any(Vec<CfgPredicate>),
 }
 
-impl CfgItem {
-	pub fn sort_recursive(&mut self) {
+impl CfgPredicate {
+	pub(crate) fn sort_recursive(&mut self) {
 		match self {
-			CfgItem::All(items) | CfgItem::Any(items) => {
-				items.sort();
-				items.iter_mut().for_each(|item| item.sort_recursive());
+			CfgPredicate::All(predicates) | CfgPredicate::Any(predicates) => {
+				predicates.sort();
+				predicates.iter_mut().for_each(|p| p.sort_recursive());
 			},
-			CfgItem::Not(item) => item.sort_recursive(),
+			CfgPredicate::Not(p) => p.sort_recursive(),
 			_ => {},
 		}
 	}
 }
 
-impl ToTokens for CfgItem {
+impl ToTokens for CfgPredicate {
 	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
 		let ts = match self {
-			CfgItem::Feature(name) => quote! { feature = #name },
-			CfgItem::All(predicates) => quote! { all(#(#predicates),*) },
-			CfgItem::Not(predicate) => quote! { not(#predicate) },
-			CfgItem::Any(predicates) => quote! { any(#(#predicates),*) },
+			CfgPredicate::Feature(name) => quote! { feature = #name },
+			CfgPredicate::All(predicates) => quote! { all(#(#predicates),*) },
+			CfgPredicate::Not(predicate) => quote! { not(#predicate) },
+			CfgPredicate::Any(predicates) => quote! { any(#(#predicates),*) },
 		};
 		tokens.extend(ts);
 	}
 }
 
-fn parse_cfg_group<T: Parse>(input: ParseStream) -> Result<Vec<CfgItem>> {
+fn parse_cfg_group<T: Parse>(input: ParseStream) -> Result<Vec<CfgPredicate>> {
 	let _ = input.parse::<T>()?;
 	let content;
 	let _ = parenthesized!(content in input);
-	let cfg_items: Punctuated<CfgItem, Token![,]> = Punctuated::parse_terminated(&content)?;
+	let cfg_items: Punctuated<CfgPredicate, Token![,]> = Punctuated::parse_terminated(&content)?;
 	Ok(Vec::from_iter(cfg_items))
 }
 
-impl Parse for CfgItem {
+impl Parse for CfgPredicate {
 	fn parse(input: ParseStream) -> Result<Self> {
 		let lookahead = input.lookahead1();
 
@@ -100,7 +102,7 @@ impl Parse for CfgItem {
 			let content;
 			parenthesized!(content in input);
 
-			Ok(Self::Not(content.parse::<CfgItem>()?.into()))
+			Ok(Self::Not(content.parse::<CfgPredicate>()?.into()))
 		} else if lookahead.peek(kw::feature) {
 			input.parse::<kw::feature>()?;
 			input.parse::<Token![=]>()?;
@@ -114,30 +116,30 @@ impl Parse for CfgItem {
 
 #[cfg(test)]
 mod test {
-	use super::CfgItem::{self, *};
+	use super::CfgPredicate::{self, *};
 	use assert_matches::assert_matches;
 	use quote::ToTokens;
 	use syn::parse_quote;
 
 	#[test]
 	fn cfg_parsing_works() {
-		let cfg: CfgItem = parse_quote! {
+		let cfg: CfgPredicate = parse_quote! {
 			feature = "f1"
 		};
 
-		assert_matches!(cfg, CfgItem::Feature(item) => {assert_eq!("f1", item)} );
+		assert_matches!(cfg, CfgPredicate::Feature(item) => {assert_eq!("f1", item)} );
 
-		let cfg: CfgItem = parse_quote! {
+		let cfg: CfgPredicate = parse_quote! {
 			all(feature = "f1", feature = "f2", any(feature = "f3", not(feature = "f4")))
 		};
 
 		assert_matches!(cfg, All(all_items) => {
-			assert_matches!(all_items.get(0).unwrap(), CfgItem::Feature(item) => {assert_eq!("f1", item)});
-			assert_matches!(all_items.get(1).unwrap(), CfgItem::Feature(item) => {assert_eq!("f2", item)});
-			assert_matches!(all_items.get(2).unwrap(), CfgItem::Any(any_items) => {
-				assert_matches!(any_items.get(0).unwrap(), CfgItem::Feature(item) => {assert_eq!("f3", item)});
-				assert_matches!(any_items.get(1).unwrap(), CfgItem::Not(not_item) => {
-					assert_matches!(**not_item, CfgItem::Feature(ref inner) => {assert_eq!("f4", inner)})
+			assert_matches!(all_items.get(0).unwrap(), CfgPredicate::Feature(item) => {assert_eq!("f1", item)});
+			assert_matches!(all_items.get(1).unwrap(), CfgPredicate::Feature(item) => {assert_eq!("f2", item)});
+			assert_matches!(all_items.get(2).unwrap(), CfgPredicate::Any(any_items) => {
+				assert_matches!(any_items.get(0).unwrap(), CfgPredicate::Feature(item) => {assert_eq!("f3", item)});
+				assert_matches!(any_items.get(1).unwrap(), CfgPredicate::Not(not_item) => {
+					assert_matches!(**not_item, CfgPredicate::Feature(ref inner) => {assert_eq!("f4", inner)})
 				});
 			});
 		});
@@ -145,21 +147,21 @@ mod test {
 
 	#[test]
 	fn cfg_item_sorts_and_compares_correctly() {
-		let item1: CfgItem = parse_quote! { feature = "f1"};
-		let item2: CfgItem = parse_quote! { feature = "f1"};
+		let item1: CfgPredicate = parse_quote! { feature = "f1"};
+		let item2: CfgPredicate = parse_quote! { feature = "f1"};
 		assert_eq!(true, item1 == item2);
 
-		let item1: CfgItem = parse_quote! { feature = "f1"};
-		let item2: CfgItem = parse_quote! { feature = "f2"};
+		let item1: CfgPredicate = parse_quote! { feature = "f1"};
+		let item2: CfgPredicate = parse_quote! { feature = "f2"};
 		assert_eq!(false, item1 == item2);
-		let mut item1: CfgItem = parse_quote! {
+		let mut item1: CfgPredicate = parse_quote! {
 			any(
 				all(feature = "f1", feature = "f2", feature = "f3"),
 				any(feature = "any1", feature = "any2"),
 				not(feature = "no")
 			)
 		};
-		let mut item2: CfgItem = parse_quote! {
+		let mut item2: CfgPredicate = parse_quote! {
 			any(
 				not(feature = "no"),
 				any(feature = "any2", feature = "any1"),
@@ -173,7 +175,7 @@ mod test {
 
 	#[test]
 	fn cfg_item_is_converted_to_tokens() {
-		let to_parse: CfgItem = parse_quote! {
+		let to_parse: CfgPredicate = parse_quote! {
 			any(
 				not(feature = "no"),
 				any(feature = "any2", feature = "any1"),
