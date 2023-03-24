@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use quote::{quote, ToTokens};
 use syn::{
 	ext::IdentExt,
 	parenthesized,
@@ -59,6 +60,18 @@ impl CfgItem {
 			},
 			_ => {},
 		}
+	}
+}
+
+impl ToTokens for CfgItem {
+	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+		let ts = match self {
+			CfgItem::Feature(name) => quote! { feature = #name },
+			CfgItem::All(predicates) => quote! { all(#(#predicates),*) },
+			CfgItem::Not(predicate) => quote! { not(#predicate) },
+			CfgItem::Any(predicates) => quote! { any(#(#predicates),*) },
+		};
+		tokens.extend(ts);
 	}
 }
 
@@ -159,6 +172,7 @@ impl Parse for CfgExpressionRoot {
 mod test {
 	use super::CfgItem::{self, *};
 	use assert_matches::assert_matches;
+	use quote::{quote, ToTokens};
 	use syn::parse_quote;
 
 	fn feat(name: &str) -> CfgItem {
@@ -190,7 +204,7 @@ mod test {
 	}
 
 	#[test]
-	fn cfg_item_compares_correctly() {
+	fn cfg_item_sorts_and_compares_correctly() {
 		let item1: CfgItem = parse_quote! { feature = "bla1"};
 		let item2: CfgItem = parse_quote! { feature = "bla1"};
 		assert_eq!(true, item1 == item2);
@@ -216,5 +230,18 @@ mod test {
 		item1.sort_recursive();
 		item2.sort_recursive();
 		assert_eq!(true, item1 == item2);
+	}
+
+	#[test]
+	fn cfg_item_is_converted_to_tokens() {
+		let to_parse: CfgItem = parse_quote! {
+			any(
+				not(feature = "no"),
+				any(feature = "any2", feature = "any1"),
+				all(feature = "bla2", feature = "bla1", feature = "bla3")
+			)
+		};
+		assert_eq!("any (not (feature = \"no\") , any (feature = \"any2\" , feature = \"any1\") , all (feature = \"bla2\" , feature = \"bla1\" , feature = \"bla3\"))"
+				   , to_parse.to_token_stream().to_string());
 	}
 }

@@ -129,7 +129,7 @@ pub struct SubSysField {
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
 
-	pub(crate) feature_gates: Option<TokenStream>,
+	pub(crate) feature_gates: Option<CfgItem>,
 }
 
 impl SubSysField {
@@ -540,15 +540,11 @@ impl OrchestraInfo {
 		let feature_list = with_features
 			.iter()
 			.filter_map(|s| s.feature_gates.clone())
-			.dedup_by(|s1, s2| {
-				if s1.to_string() == s2.to_string() {
-					eprintln!("{} == {}", s1.to_string(), s2.to_string());
-					true
-				} else {
-					eprintln!("{} != {}", s1.to_string(), s2.to_string());
-					false
-				}
+			.map(|mut cfg| {
+				cfg.sort_recursive();
+				cfg
 			})
+			.dedup()
 			.collect_vec();
 
 		let features_raw_powerset = feature_list.into_iter().powerset().collect_vec();
@@ -559,8 +555,6 @@ impl OrchestraInfo {
 			.into_iter()
 			.zip(subsystem_with_features_inverse_powerset)
 			.map(|(enabled, disabled)| {
-				let enabled_comparable =
-					enabled.clone().iter().map(|e| e.to_string()).collect_vec();
 				let guard = if disabled.is_empty() {
 					quote! {
 						#[cfg(all(#(#enabled),*))]
@@ -580,7 +574,7 @@ impl OrchestraInfo {
 						}
 
 						if let Some(raw) = &subsys.feature_gates {
-							enabled_comparable.contains(&raw.to_string())
+							enabled.contains(&raw)
 						} else {
 							false
 						}
@@ -694,18 +688,8 @@ impl OrchestraGuts {
 						err
 					})
 				}
-				let items = syn::parse2::<CfgAttrItems>(attr_tokens.clone())?.items;
-				let _test = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
-				let bla = items.clone();
-
-				// eprintln!("======Attr: {}", bla.to_string());
-				// bla.into_iter().for_each(|item| {
-				// 	eprintln!("String: {item}");
-				// 	eprintln!("Item: {item:?}");
-				// });
-				// Extract the inner condition without parenthesis
-				// #[cfg(feature = "feature")] -> feature = "feature"
-				Some(items)
+				let cfg_item = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.item;
+				Some(cfg_item)
 			} else {
 				None
 			};
