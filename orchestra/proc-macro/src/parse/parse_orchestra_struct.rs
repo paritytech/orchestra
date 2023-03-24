@@ -17,7 +17,10 @@ use super::parse_cfg::*;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
-use std::collections::{hash_map::RandomState, HashMap, HashSet};
+use std::{
+	borrow::Borrow,
+	collections::{hash_map::RandomState, HashMap, HashSet},
+};
 use syn::{
 	parenthesized,
 	parse::{Parse, ParseStream},
@@ -438,15 +441,14 @@ pub(crate) struct OrchestraInfo {
 	pub(crate) extern_error_ty: Path,
 }
 
-// TODO SKUNERT Introduce constructor
-pub struct SubsystemConfigSet {
+pub struct SubsystemConfigSet<'a> {
 	/// These subsystems should be enabled for this config set
-	pub enabled_subsystems: Vec<SubSysField>,
+	pub enabled_subsystems: Vec<&'a SubSysField>,
 
 	pub feature_gate: TokenStream,
 }
 
-impl SubsystemConfigSet {
+impl<'a> SubsystemConfigSet<'a> {
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
 		subsystem_names_without_wip(&self.enabled_subsystems)
 	}
@@ -539,8 +541,7 @@ impl OrchestraInfo {
 
 				let enabled = self
 					.subsystems
-					.clone()
-					.into_iter()
+					.iter()
 					.filter(|subsys| {
 						// Subsystems without a feature gate should always be included.
 						// If they have a feature gate, check if it is part of the currently activated feature sets.
@@ -549,14 +550,14 @@ impl OrchestraInfo {
 							.as_ref()
 							.map_or(true, |cfg| enabled_cfgs.contains(&cfg))
 					})
-					.collect_vec();
+					.collect();
 
 				SubsystemConfigSet {
 					enabled_subsystems: enabled,
 					feature_gate: output_feature_gate,
 				}
 			})
-			.collect_vec()
+			.collect()
 	}
 
 	pub(crate) fn subsystem_names_without_wip(&self) -> Vec<Ident> {
@@ -791,36 +792,41 @@ impl Parse for OrchestraGuts {
 	}
 }
 
-pub(crate) fn subsystem_names_without_wip(subsystems: &Vec<SubSysField>) -> Vec<Ident> {
+pub(crate) fn subsystem_names_without_wip<'a, T: Borrow<SubSysField>>(
+	subsystems: &[T],
+) -> Vec<Ident> {
 	subsystems
 		.iter()
+		.map(|e| e.borrow())
 		.filter(|ssf| !ssf.wip)
 		.map(|ssf| ssf.name.clone())
 		.collect::<Vec<_>>()
 }
 
-pub(crate) fn subsystem_generic_types(subsystems: &Vec<SubSysField>) -> Vec<Ident> {
+pub(crate) fn subsystem_generic_types<'a, T: Borrow<SubSysField>>(subsystems: &[T]) -> Vec<Ident> {
 	subsystems
 		.iter()
+		.map(|e| e.borrow())
 		.filter(|ssf| !ssf.wip)
-		.map(|sff| sff.generic.clone())
+		.map(|ssf| ssf.generic.clone())
 		.collect::<Vec<_>>()
 }
 
-pub(crate) fn channel_names_without_wip(
-	subsystems: &Vec<SubSysField>,
+pub(crate) fn channel_names_without_wip<'a, T: Borrow<SubSysField>>(
+	subsystems: &[T],
 	suffix: impl Into<Option<&'static str>>,
 ) -> Vec<Ident> {
 	let suffix = suffix.into().unwrap_or("");
 	subsystems
 		.iter()
+		.map(|e| e.borrow())
 		.filter(|ssf| !ssf.wip)
 		.map(|ssf| Ident::new(&(ssf.name.to_string() + suffix), ssf.name.span()))
 		.collect::<Vec<_>>()
 }
 
 pub(crate) fn message_channel_capacities_without_wip(
-	subsystems: &Vec<SubSysField>,
+	subsystems: &Vec<&SubSysField>,
 	default_capacity: usize,
 ) -> Vec<LitInt> {
 	subsystems
@@ -836,7 +842,7 @@ pub(crate) fn message_channel_capacities_without_wip(
 }
 
 pub(crate) fn signal_channel_capacities_without_wip(
-	subsystems: &Vec<SubSysField>,
+	subsystems: &Vec<&SubSysField>,
 	default_capacity: usize,
 ) -> Vec<LitInt> {
 	subsystems
@@ -851,9 +857,10 @@ pub(crate) fn signal_channel_capacities_without_wip(
 		.collect::<Vec<_>>()
 }
 
-pub(crate) fn consumes_without_wip(subsystems: &Vec<SubSysField>) -> Vec<Path> {
+pub(crate) fn consumes_without_wip<'a, T: Borrow<SubSysField>>(subsystems: &[T]) -> Vec<Path> {
 	subsystems
 		.iter()
+		.map(|e| e.borrow())
 		.filter(|ssf| !ssf.wip)
 		.map(|ssf| ssf.message_to_consume())
 		.collect::<Vec<_>>()
