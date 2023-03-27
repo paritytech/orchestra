@@ -44,7 +44,7 @@ impl Parse for CfgExpressionRoot {
 }
 
 /// Single cfg predicate for parsing.
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub(crate) enum CfgPredicate {
 	Feature(String),
 	All(Vec<CfgPredicate>),

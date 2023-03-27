@@ -534,7 +534,7 @@ impl OrchestraInfo {
 			.iter()
 			.filter_map(|s| s.feature_gates.clone())
 			// We assume that the feature gates are already sorted internally
-			.dedup()
+			.unique()
 			.powerset()
 			.collect_vec();
 

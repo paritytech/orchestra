@@ -154,7 +154,7 @@ pub(crate) fn impl_feature_guarded_items(
 ) -> proc_macro2::TokenStream {
 	let mut ts = quote! {};
 
-	let cfg_guard = &cfg_set.feature_gate.clone();
+	let cfg_guard = &cfg_set.feature_gate;
 	let subsystem_name = &cfg_set.subsystem_names_without_wip();
 	let subsystem_generics = &cfg_set.subsystem_generic_types();
 	let consumes = &cfg_set.consumes_without_wip();
