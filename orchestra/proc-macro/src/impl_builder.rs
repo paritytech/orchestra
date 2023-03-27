@@ -38,7 +38,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let subsystem_ctx_name = format_ident!("{}SubsystemContext", orchestra_name);
 	let feature_powerset_cfgs = &info.feature_gated_subsystem_sets();
 
-	let mut ts = quote! {};
+	let mut ts = proc_macro2::TokenStream::new();
 
 	// In this loop we generate items that are required for each config set separately
 	for cfg_set in feature_powerset_cfgs.into_iter() {
