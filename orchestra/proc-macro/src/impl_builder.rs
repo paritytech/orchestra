@@ -42,7 +42,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 	// In this loop we generate items that are required for each config set separately
 	for cfg_set in feature_powerset_cfgs.into_iter() {
-		let builder_items_for_config = impl_feature_guarded_items(
+		let builder_items_for_config = impl_feature_gated_items(
 			info,
 			cfg_set,
 			&builder,
@@ -143,7 +143,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	ts
 }
 
-pub(crate) fn impl_feature_guarded_items(
+pub(crate) fn impl_feature_gated_items(
 	info: &OrchestraInfo,
 	cfg_set: &SubsystemConfigSet,
 	builder: &Ident,
