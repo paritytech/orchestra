@@ -774,7 +774,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			// meter for the unbounded channel
 			unbounded_meter: #support_crate ::metered::Meter,
 			ctx: Ctx,
-			s: SubSys,
+			subsystem: SubSys,
 			subsystem_name: &'static str,
 			futures: &mut #support_crate ::FuturesUnordered<BoxFuture<'static, ::std::result::Result<(), #error_ty> >>,
 		) -> ::std::result::Result<OrchestratedSubsystem<M>, #error_ty >
@@ -786,25 +786,33 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			E: ::std::error::Error + Send + Sync + 'static + ::std::convert::From<#support_crate ::OrchestraError>,
 			SubSys: #support_crate ::Subsystem<Ctx, E>,
 		{
-			let #support_crate ::SpawnedSubsystem::<E> { future, name } = s.start(ctx);
+			let #support_crate ::SpawnedSubsystem::<E> { future, name } = subsystem.start(ctx);
 
-			let (tx, rx) = #support_crate ::oneshot::channel();
+			let (terminate_tx, terminate_rx) = #support_crate ::oneshot::channel();
 
 			let fut = Box::pin(async move {
 				#[allow(clippy::suspicious_else_formatting)]
-				if let Err(e) = future.await {
-					#support_crate ::tracing::error!(subsystem=name, err = ?e, "subsystem exited with error");
+				if let Err(err) = future.await {
+					#support_crate ::tracing::error!(subsystem=subsystem_name, ?err, "subsystem exited with error");
+					let mut source: &(dyn std::error::Error + 'static) = &err as &_;
+					while let Some(err) = source.source() {
+						#support_crate ::tracing::debug!(subsystem=subsystem_name, ?err, "caused (subsystem)");
+						source = err;
+					}
 				} else {
-					#support_crate ::tracing::debug!(subsystem=name, "subsystem exited without an error");
+					#support_crate ::tracing::debug!(subsystem=subsystem_name, "subsystem exited, successfully");
 				}
-				let _ = tx.send(());
+				let _ = terminate_tx.send(());
 			});
 
 			<TK as TaskKind>::launch_task(spawner, name, subsystem_name, fut);
 
 			futures.push(Box::pin(
-				rx.map(|e| {
-					#support_crate ::tracing::warn!(err = ?e, "dropping error");
+				terminate_rx.map(move |result| {
+					#support_crate ::tracing::warn!(subsystem=subsystem_name, "Terminating due to subsystem exit");
+					if let Err(err) = result {
+						#support_crate ::tracing::warn!(subsystem=subsystem_name, ?err, "termination error detected, dropping but terminating the execution");
+					}
 					Ok(())
 				})
 			));

@@ -16,6 +16,7 @@
 use quote::ToTokens;
 use syn::{Ident, Path};
 
+use indexmap::IndexMap;
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::{hash_map::RandomState, HashMap, HashSet};
 
@@ -35,11 +36,11 @@ pub(crate) struct ConnectionGraph<'a> {
 	/// Messages that are never being sent (and by which subsystem), but are consumed
 	/// Maps the message `Path` to the subsystem `Ident` represented by `NodeIndex`.
 	#[cfg_attr(not(feature = "dotgraph"), allow(dead_code))]
-	pub(crate) unsent_messages: HashMap<&'a Path, (&'a Ident, NodeIndex)>,
+	pub(crate) unsent_messages: IndexMap<&'a Path, (&'a Ident, NodeIndex)>,
 	/// Messages being sent (and by which subsystem), but not consumed by any subsystem
 	/// Maps the message `Path` to the subsystem `Ident` represented by `NodeIndex`.
 	#[cfg_attr(not(feature = "dotgraph"), allow(dead_code))]
-	pub(crate) unconsumed_messages: HashMap<&'a Path, Vec<(&'a Ident, NodeIndex)>>,
+	pub(crate) unconsumed_messages: IndexMap<&'a Path, Vec<(&'a Ident, NodeIndex)>>,
 }
 
 impl<'a> ConnectionGraph<'a> {
@@ -48,9 +49,9 @@ impl<'a> ConnectionGraph<'a> {
 		// create a directed graph with all the subsystems as nodes and the messages as edges
 		// key is always the message path, values are node indices in the graph and the subsystem generic identifier
 		// store the message path and the source sender, both in the graph as well as identifier
-		let mut outgoing_lut = HashMap::<&Path, Vec<(&Ident, NodeIndex)>>::with_capacity(128);
+		let mut outgoing_lut = IndexMap::<&Path, Vec<(&Ident, NodeIndex)>>::with_capacity(128);
 		// same for consuming the incoming messages
-		let mut consuming_lut = HashMap::<&Path, (&Ident, NodeIndex)>::with_capacity(128);
+		let mut consuming_lut = IndexMap::<&Path, (&Ident, NodeIndex)>::with_capacity(128);
 
 		let mut graph = Graph::<Ident, Path>::new();
 
