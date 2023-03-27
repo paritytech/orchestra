@@ -30,7 +30,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 	let consumes_variant = &info.variant_names_without_wip();
 	let unconsumes_variant = &info.variant_names_only_wip();
 
-	let feature_guards = info.feature_gates();
+	let feature_gates = info.feature_gates();
 	let support_crate = info.support_crate_name();
 
 	let ts = quote! {
@@ -41,7 +41,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 		pub struct ChannelsOut {
 			#(
 				/// Bounded channel sender, connected to a subsystem.
-				#feature_guards
+				#feature_gates
 				pub #channel_name:
 					#support_crate ::metered::MeteredSender<
 						MessagePacket< #consumes >
@@ -50,7 +50,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 
 			#(
 				/// Unbounded channel sender, connected to a subsystem.
-				#feature_guards
+				#feature_gates
 				pub #channel_name_unbounded:
 					#support_crate ::metered::UnboundedMeteredSender<
 						MessagePacket< #consumes >
@@ -70,7 +70,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 
 				let res: ::std::result::Result<_, _> = match message {
 				#(
-					#feature_guards
+					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
 						self. #channel_name .send(
 							#support_crate ::make_packet(signals_received, inner)
@@ -109,7 +109,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 			) {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
-					#feature_guards
+					#feature_gates
 					#message_wrapper :: #consumes_variant (inner) => {
 						self. #channel_name_unbounded .unbounded_send(
 							#support_crate ::make_packet(signals_received, inner)

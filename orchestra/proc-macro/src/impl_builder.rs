@@ -665,7 +665,6 @@ pub(crate) fn impl_feature_guarded_items(
 					>::new();
 
 				#(
-					let #subsystem_name: OrchestratedSubsystem< #consumes > = {
 					let #subsystem_name = match self. #subsystem_name {
 						Init::Fn(func) => func(events_tx.clone())?,
 						Init::Value(val) => val,
@@ -689,7 +688,7 @@ pub(crate) fn impl_feature_guarded_items(
 						#subsystem_name_str_literal
 					);
 
-						spawn::<_,_, #blocking, _, _, _>(
+					let #subsystem_name: OrchestratedSubsystem< #consumes > =	spawn::<_,_, #blocking, _, _, _>(
 							&mut spawner,
 							#channel_name_tx,
 							signal_tx,
@@ -698,8 +697,7 @@ pub(crate) fn impl_feature_guarded_items(
 							#subsystem_name,
 							#subsystem_name_str_literal,
 							&mut running_subsystems,
-						)?
-					};
+						)?;
 				)*
 
 				// silence a clippy warning for the last instantiation

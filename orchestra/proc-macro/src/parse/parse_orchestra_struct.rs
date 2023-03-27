@@ -659,18 +659,11 @@ impl OrchestraGuts {
 					})
 				});
 
-			let ident = ident.ok_or_else(|| {
-				Error::new(
-					ty.span(),
-					"Missing identifier for field, only named fields are expected.",
-				)
-			})?;
-
 			let feature_gates = if let Some((attr_tokens, span)) = cfg_attr.next() {
 				// multiple `#[cfg(..)]` found
 				if let Some((_attr_tokens2, span2)) = cfg_attr.next() {
 					return Err({
-						let mut err = Error::new(span, "The first subsystem annotation is at");
+						let mut err = Error::new(span, "The first cfg annotation is at");
 						err.combine(Error::new(span2, "but another here for the same field."));
 						err
 					})
@@ -682,6 +675,13 @@ impl OrchestraGuts {
 			} else {
 				None
 			};
+
+			let ident = ident.ok_or_else(|| {
+				Error::new(
+					ty.span(),
+					"Missing identifier for field, only named fields are expected.",
+				)
+			})?;
 
 			if let Some((attr_tokens, span)) = subsystem_attr.next() {
 				// a `#[subsystem(..)]` annotation exists
