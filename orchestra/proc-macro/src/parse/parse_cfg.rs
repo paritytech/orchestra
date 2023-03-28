@@ -28,7 +28,11 @@ mod kw {
 	syn::custom_keyword!(feature);
 }
 
-/// Top-level cfg expression item
+/// Top-level cfg expression item without the initial "cfg" attribute but
+/// including parenthesis.
+/// Examples:
+///	- `(feature = "feature1")`
+///	- `(any(feature = "feature1", not(feature = "feature2")))`
 #[derive(Debug, Clone)]
 pub(crate) struct CfgExpressionRoot {
 	pub(crate) predicate: CfgPredicate,
@@ -43,7 +47,11 @@ impl Parse for CfgExpressionRoot {
 	}
 }
 
-/// Single cfg predicate for parsing.
+/// Potentially nested cfg predicate for parsing.
+///	Examples:
+///	- `feature = "feature1"`
+///	- `all(feature = "feature1", feature = "feature2")`
+///	- `not(feature = "feature2")`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub(crate) enum CfgPredicate {
 	Feature(String),
