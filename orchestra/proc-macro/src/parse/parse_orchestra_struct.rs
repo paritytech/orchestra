@@ -649,7 +649,7 @@ impl OrchestraGuts {
 					})
 				});
 
-			let mut cfg_attr =
+			let cfg_attr =
 				attrs.iter().filter(|attr| attr.style == AttrStyle::Outer).filter_map(|attr| {
 					let span = attr.path.span();
 					attr.path.get_ident().filter(|ident| *ident == "cfg").map(move |_ident| {
@@ -659,22 +659,16 @@ impl OrchestraGuts {
 					})
 				});
 
-			let feature_gates = if let Some((attr_tokens, span)) = cfg_attr.next() {
-				// multiple `#[cfg(..)]` found
-				if let Some((_attr_tokens2, span2)) = cfg_attr.next() {
-					return Err({
-						let mut err = Error::new(span, "The first cfg annotation is at");
-						err.combine(Error::new(span2, "but another here for the same field."));
-						err
-					})
-				}
-				let mut cfg_predicate = syn::parse2::<CfgExpressionRoot>(attr_tokens)?.predicate;
-				// We sort here so we can do easy equality checks
-				cfg_predicate.sort_recursive();
-				Some(cfg_predicate)
-			} else {
-				None
-			};
+			let mut feature_gates: Option<CfgPredicate> = None;
+			for (cfg_token_stream, _span) in cfg_attr {
+				let cfg_predicate = syn::parse2::<CfgExpressionRoot>(cfg_token_stream)?.predicate;
+				feature_gates = match feature_gates {
+					Some(cfg) => Some(cfg.merge(cfg_predicate)),
+					None => Some(cfg_predicate),
+				};
+			}
+			// Sort here so we can do easy equality checks later
+			feature_gates.iter_mut().for_each(CfgPredicate::sort_recursive);
 
 			let ident = ident.ok_or_else(|| {
 				Error::new(

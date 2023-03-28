@@ -61,6 +61,7 @@ pub(crate) enum CfgPredicate {
 }
 
 impl CfgPredicate {
+	/// Recursively sort this predicate and all nested predicates.
 	pub(crate) fn sort_recursive(&mut self) {
 		match self {
 			CfgPredicate::All(predicates) | CfgPredicate::Any(predicates) => {
@@ -70,6 +71,11 @@ impl CfgPredicate {
 			CfgPredicate::Not(p) => p.sort_recursive(),
 			_ => {},
 		}
+	}
+
+	/// Consume self and return conjunction with another predicate.
+	pub(crate) fn merge(self, other: CfgPredicate) -> CfgPredicate {
+		Self::All(vec![self, other])
 	}
 }
 
