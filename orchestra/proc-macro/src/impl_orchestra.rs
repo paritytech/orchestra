@@ -21,6 +21,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 	let message_wrapper = &info.message_wrapper.clone();
 	let orchestra_name = info.orchestra_name.clone();
 	let subsystem_name = &info.subsystem_names_without_wip();
+	let feature_gates = &info.feature_gates();
 	let support_crate = info.support_crate_name();
 
 	let baggage_decl = &info.baggage_decl();
@@ -68,6 +69,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 
 			#(
 				/// A subsystem instance.
+				#feature_gates
 				#subsystem_name: OrchestratedSubsystem< #consumes >,
 			)*
 
@@ -101,6 +103,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			/// implementation specific.
 			pub async fn wait_terminate(&mut self, signal: #signal_ty, timeout: ::std::time::Duration) -> ::std::result::Result<(), #error_ty > {
 				#(
+					#feature_gates
 					::std::mem::drop(self. #subsystem_name .send_signal(signal.clone()).await);
 				)*
 				let _ = signal;
@@ -126,6 +129,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			/// Broadcast a signal to all subsystems.
 			pub async fn broadcast_signal(&mut self, signal: #signal_ty) -> ::std::result::Result<(), #error_ty > {
 				#(
+					#feature_gates
 					self. #subsystem_name .send_signal(signal.clone()).await?;
 				)*
 				let _ = signal;
@@ -137,11 +141,13 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			pub async fn route_message(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
 				match message {
 					#(
+						#feature_gates
 						#message_wrapper :: #consumes_variant ( inner ) =>
 							OrchestratedSubsystem::< #consumes >::send_message2(&mut self. #subsystem_name, inner, origin ).await?,
 					)*
 					// subsystems that are still work in progress
 					#(
+						#feature_gates
 						#message_wrapper :: #unconsumes_variant ( _ ) => {}
 					)*
 					#message_wrapper :: Empty => {}
@@ -165,6 +171,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			{
 				vec![
 				#(
+					#feature_gates
 					mapper.map_subsystem( & self. #subsystem_name ),
 				)*
 				]

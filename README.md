@@ -15,6 +15,7 @@ declarative.
         #[subsystem(MsgA, sends: [MsgB])]
         sub_a: AwesomeSubSysA,
 
+        #[cfg(any(feature = "feature1", feature = "feature2"))]
         #[subsystem(MsgB, sends: [MsgA])]
         sub_b: AwesomeSubSysB,
     }
@@ -32,6 +33,7 @@ error type, if not provided a builtin one is used. Note that this is the one err
 into the orchestra, without participating in the subsystem pattern.
 * `signal=` defines a signal type to be used for the orchestra. This is a shared "tick" or "clock" for all subsystems.
 * `gen=` defines a wrapping `enum` type that is used to wrap all messages that can be consumed by _any_ subsystem.
+* Features can be feature gated by `#[cfg(feature = "feature")]` attribute macro expressions. Currently supported are `any`, `all`, `not` and `feature`.
 
 ```rust
     /// Execution context, always required.
