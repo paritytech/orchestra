@@ -91,18 +91,12 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 	// Write the graph to file.
 	#[cfg(feature = "dotgraph")]
 	{
-		let path = std::path::PathBuf::from(env!("OUT_DIR"))
+		let dest = std::path::PathBuf::from(env!("OUT_DIR"))
 			.join(orchestra_name.to_string().to_lowercase() + "-subsystem-messaging.dot");
-		if let Err(e) = std::fs::OpenOptions::new()
-			.truncate(true)
-			.create(true)
-			.write(true)
-			.open(&path)
-			.and_then(|mut f| cg.graphviz(&mut f))
-		{
-			eprintln!("Failed to write dot graph to {}: {:?}", path.display(), e);
+		if let Err(e) = cg.render_graphs(&dest) {
+			eprintln!("Failed to write dot graph to {}: {:?}", dest.display(), e);
 		} else {
-			println!("Wrote dot graph to {}", path.display());
+			println!("Wrote dot graph to {}", dest.display());
 		}
 	}
 
