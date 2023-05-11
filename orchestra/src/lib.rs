@@ -274,8 +274,8 @@ pub enum OrchestraError {
 	#[error(transparent)]
 	NotifyCancellation(#[from] oneshot::Canceled),
 
-	#[error(transparent)]
-	QueueError(#[from] metered::SendError),
+	#[error("Queue error")]
+	QueueError,
 
 	#[error("Failed to spawn task {0}")]
 	TaskSpawn(&'static str),
@@ -298,6 +298,12 @@ pub enum OrchestraError {
 		#[source]
 		source: Box<dyn 'static + std::error::Error + Send + Sync>,
 	},
+}
+
+impl<T> From<metered::SendError<T>> for OrchestraError {
+	fn from(_err: metered::SendError<T>) -> Self {
+		Self::QueueError
+	}
 }
 
 /// Alias for a result with error type `OrchestraError`.
