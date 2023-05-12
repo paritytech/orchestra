@@ -279,6 +279,16 @@ pub(crate) fn impl_subsystem_sender(
 					).await;
 				}
 
+				fn try_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<()>>
+				{
+					self.channels.try_send(
+						self.signals_received.load(),
+						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
+							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
+						)
+					)
+				}
+
 				async fn send_messages<I>(&mut self, msgs: I)
 				where
 					I: IntoIterator<Item=OutgoingMessage> + Send,

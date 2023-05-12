@@ -61,27 +61,61 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 		#[allow(unreachable_code)]
 		// when no defined messages in enum
 		impl ChannelsOut {
-			async fn send_or_try(&mut self,
+			/// Send a message via a bounded channel.
+			pub async fn send_and_log_error(
+				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
-				try_send: bool) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<()>> {
-				let res: ::std::result::Result<(), #support_crate ::metered::TrySendError<()>> = match message {
+			) {
+				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						if try_send {
-							self. #channel_name .try_send(
-								#support_crate ::make_packet(signals_received, inner)
-							).map_err(|err| match err {
-									#support_crate ::metered::TrySendError::Full(_inner) => #support_crate ::metered::TrySendError::Full(()),
-									#support_crate ::metered::TrySendError::Closed(_inner) => #support_crate ::metered::TrySendError::Closed(()),
-								})
-						}
-						else {
-							self. #channel_name .send(
-								#support_crate ::make_packet(signals_received, inner)
-							).await.map_err(|_| #support_crate ::metered::TrySendError::Closed(()))
-						}
+						self. #channel_name .send(
+							#support_crate ::make_packet(signals_received, inner)
+						).await.map_err(|_| stringify!( #channel_name ))
+					}
+				)*
+					// subsystems that are wip
+				#(
+					#message_wrapper :: #unconsumes_variant ( _ ) => Ok(()),
+				)*
+					// dummy message type
+					#message_wrapper :: Empty => Ok(()),
+
+					#[allow(unreachable_patterns)]
+					// And everything that's not WIP but no subsystem consumes it
+					unused_msg => {
+						#support_crate :: tracing :: warn!("Nothing consumes {:?}", unused_msg);
+						Ok(())
+					}
+				};
+
+				if let Err(subsystem_name) = res {
+					#support_crate ::tracing::debug!(
+						target: LOG_TARGET,
+						"Failed to send (bounded) a message to {} subsystem",
+						subsystem_name
+					);
+				}
+			}
+
+			/// Try to send a message via a bounded channel.
+			pub fn try_send(
+				&mut self,
+				signals_received: usize,
+				message: #message_wrapper,
+			) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<()>> {
+				let res: ::std::result::Result<_, _> = match message {
+				#(
+					#feature_gates
+					#message_wrapper :: #consumes_variant ( inner ) => {
+						self. #channel_name .try_send(
+							#support_crate ::make_packet(signals_received, inner)
+						).map_err(|err| match err {
+								#support_crate ::metered::TrySendError::Full(_inner) => #support_crate ::metered::TrySendError::Full(()),
+								#support_crate ::metered::TrySendError::Closed(_inner) => #support_crate ::metered::TrySendError::Closed(()),
+						})
 					}
 				)*
 					// subsystems that are wip
@@ -100,30 +134,6 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				};
 
 				res
-			}
-			/// Send a message via a bounded channel.
-			pub async fn send_and_log_error(
-				&mut self,
-				signals_received: usize,
-				message: #message_wrapper,
-			) {
-				let res = self.send_or_try(signals_received, message, false).await;
-				if let Err(subsystem_name) = res {
-					#support_crate ::tracing::debug!(
-						target: LOG_TARGET,
-						"Failed to send (bounded) a message to {} subsystem",
-						subsystem_name
-					);
-				}
-			}
-
-			/// Try to send a message via a bounded channel.
-			pub async fn try_send(
-				&mut self,
-				signals_received: usize,
-				message: #message_wrapper,
-			) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<()>> {
-				self.send_or_try(signals_received, message, true).await
 			}
 
 			/// Send a message to another subsystem via an unbounded channel.
