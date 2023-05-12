@@ -35,6 +35,7 @@ impl<Context> AwesomeSubSys {
 		ctx.spawn(
 			"AwesomeSubsys",
 			Box::pin(async move {
+				sender.try_send_message(Plinko).unwrap();
 				sender.send_message(Plinko).await;
 			}),
 		)
@@ -53,6 +54,7 @@ impl<Context> Fortified {
 		ctx.spawn(
 			"GoblinTower",
 			Box::pin(async move {
+				sender.try_send_message(MsgStrukt(8u8)).unwrap();
 				sender.send_message(MsgStrukt(8u8)).await;
 			}),
 		)
