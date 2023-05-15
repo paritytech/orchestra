@@ -72,6 +72,18 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 					}
 				}
 			}
+
+			impl ::std::convert::From< #all_messages_wrapper > for #outgoing_wrapper {
+				fn from(message: #all_messages_wrapper) -> Self {
+					match message {
+					#(
+						#all_messages_wrapper :: #subsystem_generic ( msg ) => #outgoing_wrapper :: #outgoing_variant ( msg ),
+					)*
+						#all_messages_wrapper :: Empty => #outgoing_wrapper :: Empty,
+						_ => unreachable!("All messages should be consumed by a subsystem"),
+					}
+				}
+			}
 		})
 	}
 
@@ -265,7 +277,7 @@ pub(crate) fn impl_subsystem_sender(
 			#[#support_crate ::async_trait]
 			impl<OutgoingMessage> SubsystemSender< OutgoingMessage > for #subsystem_sender_name < #outgoing_wrapper >
 			where
-				OutgoingMessage: Send + 'static,
+				OutgoingMessage: ::std::convert::From<#all_messages_wrapper> + Send + 'static,
 				#outgoing_wrapper: ::std::convert::From<OutgoingMessage> + Send,
 				#all_messages_wrapper: ::std::convert::From< #outgoing_wrapper > + Send,
 			{
@@ -279,14 +291,17 @@ pub(crate) fn impl_subsystem_sender(
 					).await;
 				}
 
-				fn try_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<()>>
+				fn try_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
 				{
 					self.channels.try_send(
 						self.signals_received.load(),
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
 						)
-					)
+					).map_err(|err| match err {
+								#support_crate ::metered::TrySendError::Full(inner) => #support_crate ::metered::TrySendError::Full(inner.into()),
+								#support_crate ::metered::TrySendError::Closed(inner) => #support_crate ::metered::TrySendError::Closed(inner.into()),
+						})
 				}
 
 				async fn send_messages<I>(&mut self, msgs: I)
