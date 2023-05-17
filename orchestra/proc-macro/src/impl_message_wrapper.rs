@@ -89,11 +89,12 @@ pub(crate) fn impl_message_wrapper_enum(info: &OrchestraInfo) -> Result<proc_mac
 				}
 			}
 
-			impl ::std::convert::From< #message_wrapper > for #consumes {
-				fn from(message: #message_wrapper) -> Self {
+			impl ::std::convert::TryFrom< #message_wrapper > for #consumes {
+				type Error = ();
+				fn try_from(message: #message_wrapper) -> ::std::result::Result<Self, Self::Error> {
 					match message {
-						#message_wrapper :: #consumes_variant ( inner ) => inner,
-						_ => panic!("Message is not of type {}", stringify!(#consumes)),
+						#message_wrapper :: #consumes_variant ( inner ) => Ok(inner),
+						_ => Err(()),
 					}
 				}
 			}
