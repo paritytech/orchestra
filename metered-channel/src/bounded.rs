@@ -16,7 +16,7 @@
 
 //! Metered variant of bounded mpsc channels to be able to extract metrics.
 
-use async_channel::{bounded, TryRecvError};
+use async_channel::{bounded, RecvError, TryRecvError};
 use futures::{
 	stream::Stream,
 	task::{Context, Poll},
@@ -114,6 +114,15 @@ impl<T> MeteredReceiver<T> {
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		match self.inner.try_recv() {
 			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
+			Err(err) => Err(err),
+		}
+	}
+
+	/// Receive the next item.
+	pub async fn recv(&mut self) -> Result<T, RecvError> {
+		match self.inner.recv().await {
+			Ok(value) =>
+				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
 			Err(err) => Err(err),
 		}
 	}
