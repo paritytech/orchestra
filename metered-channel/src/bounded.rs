@@ -184,8 +184,9 @@ impl<T> MeteredSender<T> {
 					return Err(SendError::Disconnected(send_err.into_inner().into()))
 				}
 
+				self.meter.note_blocked();
+				self.meter.note_sent(); // we are going to do full blocking send, so we have to note it here
 				let msg = send_err.into_inner().into();
-				self.meter.note_sent();
 				let fut = self.inner.send(msg);
 				futures::pin_mut!(fut);
 				fut.await.map_err(|err| {
@@ -199,14 +200,11 @@ impl<T> MeteredSender<T> {
 
 	/// Attempt to send message or fail immediately.
 	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
-		let msg = self.prepare_with_tof(msg);
+		let msg = self.prepare_with_tof(msg); // note_sent is called in here
 		self.inner.try_send(msg).map_err(|e| {
-			self.meter.retract_sent();
+			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
 			match e {
-				TrySendError::Full(inner_error) => {
-					self.meter.note_blocked();
-					TrySendError::Full(inner_error.into())
-				},
+				TrySendError::Full(inner_error) => TrySendError::Full(inner_error.into()),
 				TrySendError::Closed(inner_error) => TrySendError::Closed(inner_error.into()),
 			}
 		})
