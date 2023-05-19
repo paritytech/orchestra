@@ -127,6 +127,15 @@ impl<T> MeteredReceiver<T> {
 		}
 	}
 
+	/// Attempt to receive the next item without blocking
+	pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
+		match self.inner.try_recv() {
+			Ok(value) =>
+				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
+			Err(err) => Err(err),
+		}
+	}
+
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
