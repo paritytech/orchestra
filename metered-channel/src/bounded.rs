@@ -16,7 +16,7 @@
 
 //! Metered variant of bounded mpsc channels to be able to extract metrics.
 
-use async_channel::{bounded, TryRecvError, TrySendError};
+use async_channel::{bounded, RecvError, TryRecvError};
 use futures::{
 	stream::Stream,
 	task::{Context, Poll},
@@ -24,6 +24,7 @@ use futures::{
 use std::{pin::Pin, result};
 
 use super::{measure_tof_check, CoarseInstant, MaybeTimeOfFlight, Meter};
+pub use async_channel::TrySendError;
 
 /// Create a wrapped `mpsc::channel` pair of `MeteredSender` and `MeteredReceiver`.
 pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
@@ -44,9 +45,18 @@ pub struct MeteredReceiver<T> {
 
 /// A bounded channel error
 #[derive(thiserror::Error, Debug)]
-pub enum SendError {
+pub enum SendError<T> {
 	#[error("Bounded channel has been disconnected")]
-	Disconnected,
+	Disconnected(T),
+}
+
+impl<T> SendError<T> {
+	/// Returns the inner value.
+	pub fn into_inner(self) -> T {
+		match self {
+			Self::Disconnected(t) => t,
+		}
+	}
 }
 
 impl<T> std::ops::Deref for MeteredReceiver<T> {
@@ -108,6 +118,24 @@ impl<T> MeteredReceiver<T> {
 		}
 	}
 
+	/// Receive the next item.
+	pub async fn recv(&mut self) -> Result<T, RecvError> {
+		match self.inner.recv().await {
+			Ok(value) =>
+				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
+			Err(err) => Err(err),
+		}
+	}
+
+	/// Attempt to receive the next item without blocking
+	pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
+		match self.inner.try_recv() {
+			Ok(value) =>
+				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
+			Err(err) => Err(err),
+		}
+	}
+
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
@@ -164,23 +192,24 @@ impl<T> MeteredSender<T> {
 	}
 
 	/// Send message, wait until capacity is available.
-	pub async fn send(&mut self, msg: T) -> result::Result<(), SendError>
+	pub async fn send(&mut self, msg: T) -> result::Result<(), SendError<T>>
 	where
 		Self: Unpin,
 	{
 		match self.try_send(msg) {
 			Err(send_err) => {
 				if !send_err.is_full() {
-					return Err(SendError::Disconnected)
+					return Err(SendError::Disconnected(send_err.into_inner().into()))
 				}
 
-				let msg = send_err.into_inner();
-				self.meter.note_sent();
+				self.meter.note_blocked();
+				self.meter.note_sent(); // we are going to do full blocking send, so we have to note it here
+				let msg = send_err.into_inner().into();
 				let fut = self.inner.send(msg);
 				futures::pin_mut!(fut);
-				fut.await.map_err(|_| {
+				fut.await.map_err(|err| {
 					self.meter.retract_sent();
-					SendError::Disconnected
+					SendError::Disconnected(err.0.into())
 				})
 			},
 			_ => Ok(()),
@@ -188,15 +217,14 @@ impl<T> MeteredSender<T> {
 	}
 
 	/// Attempt to send message or fail immediately.
-	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<MaybeTimeOfFlight<T>>> {
-		let msg = self.prepare_with_tof(msg);
+	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
+		let msg = self.prepare_with_tof(msg); // note_sent is called in here
 		self.inner.try_send(msg).map_err(|e| {
-			if e.is_full() {
-				// Count bounded channel sends that block.
-				self.meter.note_blocked();
+			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
+			match e {
+				TrySendError::Full(inner_error) => TrySendError::Full(inner_error.into()),
+				TrySendError::Closed(inner_error) => TrySendError::Closed(inner_error.into()),
 			}
-			self.meter.retract_sent();
-			e
 		})
 	}
 

@@ -67,7 +67,6 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				signals_received: usize,
 				message: #message_wrapper,
 			) {
-
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
@@ -99,6 +98,42 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 						subsystem_name
 					);
 				}
+			}
+
+			/// Try to send a message via a bounded channel.
+			pub fn try_send(
+				&mut self,
+				signals_received: usize,
+				message: #message_wrapper,
+			) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<#message_wrapper>> {
+				let res: ::std::result::Result<_, _> = match message {
+				#(
+					#feature_gates
+					#message_wrapper :: #consumes_variant ( inner ) => {
+						self. #channel_name .try_send(
+							#support_crate ::make_packet(signals_received, inner)
+						).map_err(|err| match err {
+								#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( err_inner.message )),
+								#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( err_inner.message )),
+						})
+					}
+				)*
+					// subsystems that are wip
+				#(
+					#message_wrapper :: #unconsumes_variant ( _ ) => Ok(()),
+				)*
+					// dummy message type
+					#message_wrapper :: Empty => Ok(()),
+
+					#[allow(unreachable_patterns)]
+					// And everything that's not WIP but no subsystem consumes it
+					unused_msg => {
+						#support_crate :: tracing :: warn!("Nothing consumes {:?}", unused_msg);
+						Ok(())
+					}
+				};
+
+				res
 			}
 
 			/// Send a message to another subsystem via an unbounded channel.

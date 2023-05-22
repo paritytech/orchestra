@@ -274,8 +274,8 @@ pub enum OrchestraError {
 	#[error(transparent)]
 	NotifyCancellation(#[from] oneshot::Canceled),
 
-	#[error(transparent)]
-	QueueError(#[from] metered::SendError),
+	#[error("Queue error")]
+	QueueError,
 
 	#[error("Failed to spawn task {0}")]
 	TaskSpawn(&'static str),
@@ -298,6 +298,12 @@ pub enum OrchestraError {
 		#[source]
 		source: Box<dyn 'static + std::error::Error + Send + Sync>,
 	},
+}
+
+impl<T> From<metered::SendError<T>> for OrchestraError {
+	fn from(_err: metered::SendError<T>) -> Self {
+		Self::QueueError
+	}
 }
 
 /// Alias for a result with error type `OrchestraError`.
@@ -489,6 +495,15 @@ where
 {
 	/// Send a direct message to some other `Subsystem`, routed based on message type.
 	async fn send_message(&mut self, msg: OutgoingMessage);
+
+	/// Tries to send a direct message to some other `Subsystem`, routed based on message type.
+	/// This method is useful for cases where the message queue is bounded and the message is ok
+	/// to be dropped if the queue is full. If the queue is full, this method will return an error.
+	/// This method is not async and will not block the current task.
+	fn try_send_message(
+		&mut self,
+		msg: OutgoingMessage,
+	) -> Result<(), metered::TrySendError<OutgoingMessage>>;
 
 	/// Send multiple direct messages to other `Subsystem`s, routed based on message type.
 	async fn send_messages<I>(&mut self, msgs: I)

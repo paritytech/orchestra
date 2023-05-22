@@ -159,21 +159,33 @@ fn failed_send_does_not_inc_sent() {
 
 #[test]
 fn blocked_send_is_metered() {
-	let (mut bounded_sender, mut bounded_receiver) = channel::<Msg>(2);
+	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(2);
 
 	block_on(async move {
-		assert!(bounded_sender.send(Msg::default()).await.is_ok());
-		assert!(bounded_sender.send(Msg::default()).await.is_ok());
-		assert!(bounded_sender.try_send(Msg::default()).is_err());
-
-		assert_matches!(
-			bounded_sender.meter().read(),
-			Readout { sent: 2, received: 0, blocked: 1, .. }
-		);
-		bounded_receiver.try_next().unwrap();
-		assert_matches!(
-			bounded_receiver.meter().read(),
-			Readout { sent: 2, received: 1, blocked: 1, .. }
+		let mut sender1 = bounded_sender.clone();
+		futures::join!(
+			async move {
+				assert!(sender1.send(Msg::default()).await.is_ok());
+				assert!(sender1.send(Msg::default()).await.is_ok());
+				assert!(sender1.send(Msg::default()).await.is_ok());
+			},
+			async move {
+				bounded_receiver.recv().await.unwrap();
+				assert_matches!(
+					bounded_receiver.meter().read(),
+					Readout { sent: 3, received: 1, blocked: 1, .. }
+				);
+				bounded_receiver.recv().await.unwrap();
+				bounded_receiver.recv().await.unwrap();
+				assert_matches!(
+					bounded_receiver.meter().read(),
+					Readout { sent: 3, received: 3, blocked: 1, .. }
+				);
+				assert_matches!(
+					bounded_sender.meter().read(),
+					Readout { sent: 3, received: 3, blocked: 1, .. }
+				);
+			}
 		);
 	});
 }
