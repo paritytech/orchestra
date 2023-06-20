@@ -59,7 +59,7 @@
 // unused dependencies can not work for test and examples at the same time
 // yielding false positives
 #![deny(missing_docs)]
-#![deny(unused_crate_dependencies)]
+// #![deny(unused_crate_dependencies)]
 
 pub use orchestra_proc_macro::{contextbounds, orchestra, subsystem};
 
