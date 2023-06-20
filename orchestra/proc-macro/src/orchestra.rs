@@ -40,6 +40,7 @@ pub(crate) fn impl_orchestra_gen(
 		extern_signal_ty: args.extern_signal_ty,
 		extern_error_ty: args.extern_error_ty,
 		outgoing_ty: args.outgoing_ty,
+		boxed_messages: args.boxed_messages,
 	};
 
 	let mut additive = impl_orchestra_struct(&info);

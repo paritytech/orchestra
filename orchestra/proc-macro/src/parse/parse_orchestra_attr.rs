@@ -21,7 +21,7 @@ use syn::{
 	parse::{Parse, ParseBuffer},
 	punctuated::Punctuated,
 	spanned::Spanned,
-	Error, Ident, LitInt, Path, Result, Token,
+	Error, Ident, LitBool, LitInt, Path, Result, Token,
 };
 
 #[derive(Clone, Debug)]
@@ -31,6 +31,7 @@ enum OrchestraAttrItem {
 	ExternErrorType { tag: kw::error, eq_token: Token![=], value: Path },
 	OutgoingType { tag: kw::outgoing, eq_token: Token![=], value: Path },
 	MessageWrapperName { tag: kw::gen, eq_token: Token![=], value: Ident },
+	BoxedMessages { tag: kw::boxed_messages, eq_token: Token![=], value: bool },
 	SignalChannelCapacity { tag: kw::signal_capacity, eq_token: Token![=], value: usize },
 	MessageChannelCapacity { tag: kw::message_capacity, eq_token: Token![=], value: usize },
 }
@@ -57,6 +58,9 @@ impl ToTokens for OrchestraAttrItem {
 				quote! { #tag #eq_token, #value }
 			},
 			Self::MessageChannelCapacity { tag, eq_token, value } => {
+				quote! { #tag #eq_token, #value }
+			},
+			Self::BoxedMessages { tag, eq_token, value } => {
 				quote! { #tag #eq_token, #value }
 			},
 		};
@@ -109,6 +113,12 @@ impl Parse for OrchestraAttrItem {
 				eq_token: input.parse()?,
 				value: input.parse::<LitInt>()?.base10_parse::<usize>()?,
 			})
+		} else if lookahead.peek(kw::boxed_messages) {
+			Ok(OrchestraAttrItem::BoxedMessages {
+				tag: input.parse::<kw::boxed_messages>()?,
+				eq_token: input.parse()?,
+				value: input.parse::<LitBool>()?.value(),
+			})
 		} else {
 			Err(lookahead.error())
 		}
@@ -125,6 +135,7 @@ pub(crate) struct OrchestraAttrArgs {
 	pub(crate) outgoing_ty: Option<Path>,
 	pub(crate) signal_channel_capacity: usize,
 	pub(crate) message_channel_capacity: usize,
+	pub(crate) boxed_messages: bool,
 }
 
 macro_rules! extract_variant {
@@ -176,6 +187,7 @@ impl Parse for OrchestraAttrArgs {
 		let signal = extract_variant!(unique, ExternOrchestraSignalType; err = "Must declare the orchestra signal type via `signal=..`.")?;
 		let message_wrapper = extract_variant!(unique, MessageWrapperName; err = "Must declare the orchestra generated wrapping message type via `gen=..`.")?;
 		let outgoing = extract_variant!(unique, OutgoingType);
+		let boxed_messages = extract_variant!(unique, BoxedMessages; default = false);
 
 		Ok(OrchestraAttrArgs {
 			signal_channel_capacity,
@@ -185,6 +197,7 @@ impl Parse for OrchestraAttrArgs {
 			extern_error_ty: error,
 			outgoing_ty: outgoing,
 			message_wrapper,
+			boxed_messages,
 		})
 	}
 }
