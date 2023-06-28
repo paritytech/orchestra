@@ -14,8 +14,8 @@ tracing = "0.1.35"
 futures = { version = "0.3", features = ["thread-pool"] }
 async-trait = "0.1"
 thiserror = "1"
-metered = { package = "prioritized-metered-channel", version = "0.4.0", path = "../metered-channel" }
-orchestra-proc-macro = { version = "0.2.0", path = "./proc-macro" }
+metered = { package = "prioritized-metered-channel", version = "0.5.0", path = "../metered-channel", default-features = false }
+orchestra-proc-macro = { version = "0.3.0", path = "./proc-macro" }
 futures-timer = "3.0.2"
 pin-project = "1.0"
 dyn-clonable = "0.9"
@@ -39,7 +39,7 @@ name = "bench_main"
 harness = false
 
 [features]
-default = ["deny_unconsumed_messages","deny_unsent_messages"]
+default = ["deny_unconsumed_messages","deny_unsent_messages","async_channel"]
 # Generate a file containing the generated code that
 # is used via `include_str!`.
 expand = ["orchestra-proc-macro/expand"]
@@ -52,3 +52,7 @@ dotgraph = ["orchestra-proc-macro/dotgraph"]
 deny_unconsumed_messages = ["orchestra-proc-macro/deny_unconsumed_messages"]
 # Creates a compile error if unsent messages are encountered
 deny_unsent_messages = ["orchestra-proc-macro/deny_unsent_messages"]
+# Use async channel in the subsystem message channels (default)
+async_channel = ["metered/async_channel"]
+# Use compatibility futures channel in the subsystem message channels
+futures_channel = ["metered/futures_channel"]
