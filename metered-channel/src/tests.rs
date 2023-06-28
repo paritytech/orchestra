@@ -159,7 +159,12 @@ fn failed_send_does_not_inc_sent() {
 
 #[test]
 fn blocked_send_is_metered() {
+	// Async channel and futures channel have different semantics for
+	// capacity (futures channel capacity is actually `capacity + 1`)
+	#[cfg(feature = "async_channel")]
 	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(2);
+	#[cfg(feature = "futures_channel")]
+	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(1);
 
 	block_on(async move {
 		let mut sender1 = bounded_sender.clone();
@@ -170,13 +175,13 @@ fn blocked_send_is_metered() {
 				assert!(sender1.send(Msg::default()).await.is_ok());
 			},
 			async move {
-				bounded_receiver.recv().await.unwrap();
+				bounded_receiver.next().await.unwrap();
 				assert_matches!(
 					bounded_receiver.meter().read(),
 					Readout { sent: 3, received: 1, blocked: 1, .. }
 				);
-				bounded_receiver.recv().await.unwrap();
-				bounded_receiver.recv().await.unwrap();
+				bounded_receiver.next().await.unwrap();
+				bounded_receiver.next().await.unwrap();
 				assert_matches!(
 					bounded_receiver.meter().read(),
 					Readout { sent: 3, received: 3, blocked: 1, .. }
