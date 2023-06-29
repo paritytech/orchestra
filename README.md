@@ -65,7 +65,7 @@ for the specific struct field. Therefore, if you see a compile time error that b
 not set prior to the `build` call.
 
 To exclude subsystems from such a check, one can set `wip` attribute on some subsystem that
-is not ready to be included in the Orchestra:
+is not ready to be included in the `orchestra`:
 
 ```rust
     #[orchestra(signal=SigSigSig, event=Event, gen=AllMessages, error=OrchestraError)]
@@ -104,6 +104,31 @@ The path to the generated file will be displayed and is of the form
 Use `dot -Tpng ${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot > connectivity.dot` to
 convert to i.e. a `png` image or use your favorite dot file viewer.
 
+## Caveats
+
+No tool is without caveats, and `orchestra` is no exception.
+
+### Large Message Types
+
+It is not recommended to have large messages that are sent via channels, just like for other
+implementations of channels.
+If you need to transfer data that is larger than a few dozend bytes, use `Box<_>` around it or use a global identifier to access persisted state such as a database, depending on the use case.
+
+### Response Channels
+
+It seems very appealing to have response channels as part of messages, and for many cases,
+these are a very convenient way of maintaining a strucutured data flow, yet they are ready
+to shoot you in the foot when not used diligently. The diligence required is regarding three
+topics:
+
+1. Circular message dependencies leading to a dead-lock for single threaded subsystems
+2. Too deep message dependencies across _many_ subsystems
+3. Delays due to response channels
+
+Each of them has a variety of solutions, such as local caching to remedy frequent lookups of the same information or splitting up subsystem into multiple to avoid circular dependencies or merging tiny topologically closely related to one subsystem in some exceptional cases, but strongly depend on the individual context in which orchestra is used.
+
+To find these, the feature `dotgraph` is providing a visualization of all interactions of the subsystem to subsystem level (not on the message level, yet) to investigate cycles.
+Keep an eye on warnings during the generation phase.
 
 ## License
 

@@ -15,19 +15,17 @@
 
 //! # Orchestra
 //!
-//! `orchestra` provides a global information flow of what a token of information.
+//! `orchestra` provides a global information flow system in reference to system specifc
+//! process tokens.
 //! The token is arbitrary, but is used to notify all `Subsystem`s of what is relevant
-//! and what is not.
+//! and what is not, leading to a so called _view_ of active tokens.
 //!
-//! For the motivations behind implementing the orchestra itself you should
-//! check out that guide, documentation in this crate will focus and be of
-//! technical nature.
-//!
-//! An `Orchestra` is something that allows spawning/stopping and orchestrating
+//! An `orchestra` is something that allows spawning/stopping and orchestrating
 //! asynchronous tasks as well as establishing a well-defined and easy to use
 //! protocol that the tasks can use to communicate with each other. It is desired
-//! that this protocol is the only way tasks communicate with each other, however
-//! at this moment there are no foolproof guards against other ways of communication.
+//! that this protocol is the only way tasks - called `Subsystem`s in the orchestra
+//! scope - communicate with each other, but that is not enforced and is the responsibility
+//! of the developer.
 //!
 //! The `Orchestra` is instantiated with a pre-defined set of `Subsystems` that
 //! share the same behavior from `Orchestra`'s point of view.
@@ -47,11 +45,14 @@
 //!             ..................................................................
 //!                         |                                       |
 //!                       start()                                 start()
+//!                         |                                       |
 //!                         V                                       V
-//!             ..................| Orchestra "runs" these |.......................
+//!             ..................| Orchestra "runs" these |......................
+//!             .                                                                .
 //!             .  +--------------------+               +---------------------+  .
 //!             .  | SubsystemInstance1 | <-- bidir --> | SubsystemInstance2  |  .
 //!             .  +--------------------+               +---------------------+  .
+//!             .                                                                .
 //!             ..................................................................
 //! ```
 
