@@ -55,10 +55,7 @@
 //!             .                                                                .
 //!             ..................................................................
 //! ```
-
-// #![deny(unused_results)]
-// unused dependencies can not work for test and examples at the same time
-// yielding false positives
+#![deny(unused_results)]
 #![deny(missing_docs)]
 #![deny(unused_crate_dependencies)]
 
@@ -232,7 +229,7 @@ impl SignalsReceived {
 
 	/// Increase the number of signals by one.
 	pub fn inc(&self) {
-		self.0.fetch_add(1, atomic::Ordering::AcqRel);
+		let _previous = self.0.fetch_add(1, atomic::Ordering::AcqRel);
 	}
 }
 
