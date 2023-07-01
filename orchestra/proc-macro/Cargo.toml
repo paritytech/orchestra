@@ -26,7 +26,7 @@ indexmap = "1"
 dotlay = { package = "layout-rs", version = "0.1.1", features = [
   "log",
 ], optional = true }
-resvg = { version = "0.28", optional = true }
+resvg = { version = "0.32", optional = true }
 png = { version = "0.17", optional = true }
 fs-err = { version = "2", optional = true }
 anyhow = { version = "1", optional = true }

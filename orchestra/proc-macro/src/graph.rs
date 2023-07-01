@@ -212,12 +212,12 @@ node [colorscheme={}]
 		let png_content = {
 			use resvg::{render, tiny_skia::Pixmap, usvg};
 
-			let rtree = usvg::Tree::from_data(svg_content.as_bytes(), &usvg::Options::default())?;
+			let rtree = usvg::Tree::from_str(&svg_content, &usvg::Options::default())?;
 			let mut pixi =
 				Pixmap::new(rtree.size.width() as u32, rtree.size.height() as u32).unwrap();
 			render(
 				&rtree,
-				usvg::FitTo::Original,
+				resvg::FitTo::Original,
 				resvg::tiny_skia::Transform::default(),
 				pixi.as_mut(),
 			)
