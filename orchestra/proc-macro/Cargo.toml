@@ -21,8 +21,8 @@ proc-macro2 = { version = "1.0.47", features = ["span-locations"] }
 proc-macro-crate = "1.1.3"
 expander = { version = "2.0.0", default-features = false }
 petgraph = "0.6.0"
-itertools = { version = "0.10.3" }
-indexmap = "1"
+itertools = { version = "0.11" }
+indexmap = "2"
 dotlay = { package = "layout-rs", version = "0.1.1", features = [
   "log",
 ], optional = true }
