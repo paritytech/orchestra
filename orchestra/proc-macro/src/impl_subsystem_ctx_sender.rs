@@ -94,9 +94,8 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 		let dest = std::path::PathBuf::from(env!("OUT_DIR"))
 			.join(orchestra_name.to_string().to_lowercase() + "-subsystem-messaging.dot");
 		if let Err(e) = cg.render_graphs(&dest) {
-			eprintln!("Failed to write dot graph to {}: {:?}", dest.display(), e);
-		} else {
-			println!("Wrote dot graph to {}", dest.display());
+			eprintln!("Hetscher/Hiccup: {}", e);
+			e.chain().skip(1).for_each(|cause| eprintln!("caused by: {}", cause));
 		}
 	}
 
