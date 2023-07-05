@@ -96,8 +96,6 @@ pub(crate) fn impl_subsystem_types_all(info: &OrchestraInfo) -> Result<TokenStre
 		if let Err(e) = cg.render_graphs(&dest) {
 			eprintln!("Hetscher/Hiccup: {}", e);
 			e.chain().skip(1).for_each(|cause| eprintln!("caused by: {}", cause));
-		} else {
-			println!("Wrote dot graph to {}", dest.display());
 		}
 	}
 

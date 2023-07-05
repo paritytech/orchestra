@@ -21,13 +21,12 @@ proc-macro2 = { version = "1.0.47", features = ["span-locations"] }
 proc-macro-crate = "1.1.3"
 expander = { version = "2.0.0", default-features = false }
 petgraph = "0.6.0"
-itertools = { version = "0.10.3" }
-indexmap = "1"
+itertools = { version = "0.11" }
+indexmap = "2"
 dotlay = { package = "layout-rs", version = "0.1.1", features = [
   "log",
 ], optional = true }
-resvg = { version = "0.32", optional = true }
-png = { version = "0.17", optional = true }
+resvg = { version = "0.35", optional = true }
 fs-err = { version = "2", optional = true }
 anyhow = { version = "1", optional = true }
 
@@ -38,14 +37,19 @@ thiserror = "1"
 tracing = "0.1"
 
 [features]
-default = [ "dotgraph" ]
+default = ["dotgraph"]
 # enable "dotgraph" by default, blocked by <https://github.com/paritytech/ci_cd/issues/433>
 # write the expanded version to a `orchestra-expansion.[a-f0-9]{10}.rs`
 # in the `OUT_DIR` as defined by `cargo` for the `expander` crate.
 expand = []
 # Create directional message consuming / outgoing graph.
 # Generates: `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`
-dotgraph = ["dotlay", "anyhow", "png", "fs-err", "resvg"]
+dotgraph = ["dotlay", "anyhow", "fs-err"]
+# tiny skia does not support text rendering, the output graphs will NOT have any text
+# and will remain rather useless for the time being, hence feature gated tl;dr `cosmic-text` might be a solution in the future 
+# <https://github.com/RazrFalcon/tiny-skia/issues/1>
+dotgraph-broken-png = ["dotgraph", "resvg"]
+
 # Creates a compile error if unconsumed messages are encountered
 deny_unconsumed_messages = []
 # Creates a compile error if unsent messages are encountered

@@ -186,48 +186,64 @@ impl<'a> ConnectionGraph<'a> {
 		use self::graph_helpers::color_scheme;
 		use fs_err as fs;
 
-		let dot_content = dbg!(format!(
+		let dot_content = format!(
 			r#"digraph {{
-				
+				fontname="Cantarell"
+				bgcolor="white"
+				label = "orchestra message flow between subsystems"
 node [colorscheme={}]
 {:?}
 }}"#,
 			color_scheme(),
 			&dot
-		));
+		);
 
 		let dest = dest.as_ref();
 		let dest = dest.to_path_buf();
 
 		let svg_content = {
 			let mut parser = dotlay::gv::DotParser::new(dot_content.as_str());
-			let graph = parser.process().map_err(|err_msg| anyhow::anyhow!(dbg!(err_msg)).context("Failed to parse dotfile"))?;
+			let graph = parser.process().map_err(|err_msg| {
+				anyhow::anyhow!(dbg!(err_msg)).context("Failed to parse dotfile")
+			})?;
 			let mut svg = dotlay::backends::svg::SVGWriter::new();
 			let mut builder = dotlay::gv::GraphBuilder::default();
 			builder.visit_graph(&graph);
 			let mut vg = builder.get();
-			vg.do_it(true, false, false, &mut svg);
+			vg.do_it(false, false, false, &mut svg);
 			svg.finalize()
 		};
 
+		// tiny skia does not support text rendering, tl;dr `cosmic-text` might be a solution in the future
+		// https://github.com/RazrFalcon/tiny-skia/issues/1
+		#[cfg(feature = "dotgraph-broken-png")]
 		let png_content = {
-			use resvg::{render, tiny_skia::Pixmap, usvg::{self, TreeParsing}};
+			use resvg::{tiny_skia::Pixmap, usvg};
 
-			let rtree = usvg::Tree::from_data(dbg!(&svg_content).as_bytes(), &usvg::Options::default())?;
+			let tree = usvg::Tree::from_data(&svg_content.as_bytes(), &usvg::Options::default())?;
+			let rtree = Tree::from_usvg(&tree);
 			let mut pixi =
 				Pixmap::new(rtree.size.width() as u32, rtree.size.height() as u32).unwrap();
-			render(
-				&rtree,
-				resvg::FitTo::Original,
-				resvg::tiny_skia::Transform::default(),
-				pixi.as_mut(),
-			)
-			.ok_or_else(|| anyhow::anyhow!("Failed to render svg to png"))?;
+			rtree.render(resvg::tiny_skia::Transform::default(), &mut pixi.as_mut());
 			pixi.encode_png()?
 		};
-		fs::write(dest.with_extension("dot"), dot_content)?;
-		fs::write(dest.with_extension("svg"), svg_content.as_bytes())?;
-		fs::write(dest.with_extension("png"), png_content)?;
+
+		fn write_to_disk(
+			dest: impl AsRef<std::path::Path>,
+			ext: &str,
+			content: impl AsRef<[u8]>,
+		) -> std::io::Result<()> {
+			let dest = dest.as_ref().with_extension(ext);
+			print!("Writing {} to {} ..", ext, dest.display());
+			fs::write(dest, content.as_ref())?;
+			println!(" OK");
+			Ok(())
+		}
+
+		write_to_disk(&dest, "dot", &dot_content)?;
+		write_to_disk(&dest, "svg", &svg_content)?;
+		#[cfg(feature = "dotgraph-broken-png")]
+		write_to_disk(&dest, "png", &png_content)?;
 
 		Ok(())
 	}
