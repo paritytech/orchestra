@@ -186,21 +186,22 @@ impl<'a> ConnectionGraph<'a> {
 		use self::graph_helpers::color_scheme;
 		use fs_err as fs;
 
-		let dot_content = format!(
+		let dot_content = dbg!(format!(
 			r#"digraph {{
+				
 node [colorscheme={}]
 {:?}
 }}"#,
 			color_scheme(),
 			&dot
-		);
+		));
 
 		let dest = dest.as_ref();
 		let dest = dest.to_path_buf();
 
 		let svg_content = {
 			let mut parser = dotlay::gv::DotParser::new(dot_content.as_str());
-			let graph = parser.process().map_err(|err_msg| anyhow::anyhow!(err_msg))?;
+			let graph = parser.process().map_err(|err_msg| anyhow::anyhow!(dbg!(err_msg)).context("Failed to parse dotfile"))?;
 			let mut svg = dotlay::backends::svg::SVGWriter::new();
 			let mut builder = dotlay::gv::GraphBuilder::default();
 			builder.visit_graph(&graph);
@@ -210,9 +211,9 @@ node [colorscheme={}]
 		};
 
 		let png_content = {
-			use resvg::{render, tiny_skia::Pixmap, usvg};
+			use resvg::{render, tiny_skia::Pixmap, usvg::{self, TreeParsing}};
 
-			let rtree = usvg::Tree::from_str(&svg_content, &usvg::Options::default())?;
+			let rtree = usvg::Tree::from_data(dbg!(&svg_content).as_bytes(), &usvg::Options::default())?;
 			let mut pixi =
 				Pixmap::new(rtree.size.width() as u32, rtree.size.height() as u32).unwrap();
 			render(
