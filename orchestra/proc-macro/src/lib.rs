@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #![allow(clippy::all)]
+#![deny(unused_crate_dependencies)]
+#![deny(unused_imports)]
+#![deny(unused_import_braces)]
 
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{parse_quote, spanned::Spanned, Path};

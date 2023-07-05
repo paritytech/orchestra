@@ -32,9 +32,6 @@ anyhow = { version = "1", optional = true }
 
 [dev-dependencies]
 assert_matches = "1.5"
-orchestra = { path = "../" }
-thiserror = "1"
-tracing = "0.1"
 
 [features]
 default = ["dotgraph"]

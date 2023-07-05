@@ -848,15 +848,12 @@ dependencies = [
  "indexmap 2.0.0",
  "itertools 0.11.0",
  "layout-rs",
- "orchestra",
  "petgraph",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
  "resvg",
  "syn",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
