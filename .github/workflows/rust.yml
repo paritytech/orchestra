@@ -37,7 +37,30 @@ jobs:
         uses: actions-rs/cargo@v1.0.3
         with:
           command: check
-          args: --all-targets --all-features --workspace
+          args: --all-targets --workspace
+
+  build-futures:
+    name: Cargo check futures channel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Build
+        uses: actions-rs/cargo@v1.0.3
+        with:
+          command: check
+          args: --no-default-features --features futures_channel --manifest-path metered-channel/Cargo.toml
 
   fmt:
     name: Cargo fmt
