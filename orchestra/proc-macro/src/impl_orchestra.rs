@@ -135,9 +135,7 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 				#(
 					// Use fast path if possible.
 					#feature_gates
-					match self. #subsystem_name .try_send_signal(signal.clone()) {
-						Ok(()) => {},
-						Err(e) => {
+					if let Err(e) = self. #subsystem_name .try_send_signal(signal.clone()) {
 							match e {
 								#support_crate::TrySendError::Full(sig) => {
 									let instance = self. #subsystem_name .instance.as_mut().expect("checked in try_send_signal");
@@ -162,7 +160,6 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 								},
 								_ => return Err(#error_ty :: from(#support_crate ::OrchestraError::QueueError))
 							}
-						},
 					}
 				)*
 				let _ = signal;
@@ -295,12 +292,9 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 			/// Tries to send a signal to the wrapped subsystem without waiting.
 			pub fn try_send_signal(&mut self, signal: #signal) -> ::std::result::Result<(), #support_crate :: TrySendError<#signal> > {
 				if let Some(ref mut instance) = self.instance {
-					match instance.tx_signal.try_send(signal) {
-						Err(e) => Err(e),
-						Ok(()) => {
-							instance.signals_received += 1;
-							Ok(())
-						},
+					if let Ok(()) = instance.tx_signal.try_send(signal)? {
+						instance.signals_received += 1;
+						Ok(())
 					}
 				} else {
 					Ok(())
