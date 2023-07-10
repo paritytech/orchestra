@@ -61,6 +61,8 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 
 		/// Capacity of a signal channel between a subsystem and the orchestra.
 		const SIGNAL_CHANNEL_CAPACITY: usize = #signal_channel_capacity;
+		/// Timeout to wait for a signal to be processed by the target subsystem. If this timeout is exceeded, the
+		/// orchestra terminates with an error.
 		const SIGNAL_TIMEOUT: ::std::time::Duration = ::std::time::Duration::from_secs(10);
 
 		/// The log target tag.
@@ -292,10 +294,9 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 			/// Tries to send a signal to the wrapped subsystem without waiting.
 			pub fn try_send_signal(&mut self, signal: #signal) -> ::std::result::Result<(), #support_crate :: TrySendError<#signal> > {
 				if let Some(ref mut instance) = self.instance {
-					if let Ok(()) = instance.tx_signal.try_send(signal)? {
-						instance.signals_received += 1;
-						Ok(())
-					}
+					instance.tx_signal.try_send(signal)?;
+					instance.signals_received += 1;
+					Ok(())
 				} else {
 					Ok(())
 				}
