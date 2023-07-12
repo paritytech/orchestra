@@ -214,21 +214,6 @@ node [colorscheme={}]
 			svg.finalize()
 		};
 
-		// tiny skia does not support text rendering, tl;dr `cosmic-text` might be a solution in the future
-		// https://github.com/RazrFalcon/tiny-skia/issues/1
-		#[cfg(feature = "dotgraph-broken-png")]
-		let png_content = {
-			use resvg::{tiny_skia::Pixmap, usvg, Tree};
-			use usvg::TreeParsing;
-
-			let tree = usvg::Tree::from_data(&svg_content.as_bytes(), &usvg::Options::default())?;
-			let rtree = Tree::from_usvg(&tree);
-			let mut pixi =
-				Pixmap::new(rtree.size.width() as u32, rtree.size.height() as u32).unwrap();
-			rtree.render(resvg::tiny_skia::Transform::default(), &mut pixi.as_mut());
-			pixi.encode_png()?
-		};
-
 		fn write_to_disk(
 			dest: impl AsRef<std::path::Path>,
 			ext: &str,
@@ -243,8 +228,6 @@ node [colorscheme={}]
 
 		write_to_disk(&dest, "dot", &dot_content)?;
 		write_to_disk(&dest, "svg", &svg_content)?;
-		#[cfg(feature = "dotgraph-broken-png")]
-		write_to_disk(&dest, "png", &png_content)?;
 
 		Ok(())
 	}
