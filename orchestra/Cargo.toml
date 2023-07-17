@@ -11,7 +11,7 @@ autoexamples = false
 
 [dependencies]
 tracing = "0.1.35"
-futures = { version = "0.3", features = ["thread-pool"] }
+futures = "0.3"
 async-trait = "0.1"
 thiserror = "1"
 metered = { package = "prioritized-metered-channel", version = "0.4.0", path = "../metered-channel" }
@@ -24,7 +24,7 @@ dyn-clonable = "0.9"
 trybuild = "1.0.61"
 rustversion = "1.0.6"
 criterion = { version = "0.4.0" }
-
+futures = { version = "0.3", features = ["thread-pool"] }
 
 [[example]]
 name = "duo"
