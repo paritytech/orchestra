@@ -103,6 +103,8 @@ The path to the generated file will be displayed and is of the form
 `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`.
 Use `dot -Tpng ${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot > connectivity.dot` to
 convert to i.e. a `png` image or use your favorite dot file viewer.
+It also creates a `.svg` alongside the `.dot` graph, derived from the `.dot` graph for
+direct usage.
 
 ## Caveats
 

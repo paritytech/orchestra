@@ -45,7 +45,8 @@ default = ["deny_unconsumed_messages","deny_unsent_messages","async_channel"]
 expand = ["orchestra-proc-macro/expand"]
 # Generate a connectivity graph in dot-graph form.
 # Generated file: `${OUT_DIR}/${orchestra|lowercase}-subsystem-messaging.dot`
-# Use with `dot $path/to/dot.file -Tpng > connection.graph`
+# Use with `dot $path/to/dot.file -Tpng > connection.graph` or use
+# the generated `*.svg` file directly.
 # or use a dot-graph viewer of your choice.
 dotgraph = ["orchestra-proc-macro/dotgraph"]
 # Creates a compile error if unconsumed messages are encountered

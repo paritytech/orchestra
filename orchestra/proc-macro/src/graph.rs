@@ -178,11 +178,65 @@ impl<'a> ConnectionGraph<'a> {
 		sccs
 	}
 
+	#[cfg(feature = "dotgraph")]
+	fn convert_and_write_all<'b>(
+		dot: &petgraph::dot::Dot<'b, &'b petgraph::graph::Graph<Ident, Path>>,
+		dest: impl AsRef<std::path::Path>,
+	) -> anyhow::Result<()> {
+		use self::graph_helpers::color_scheme;
+		use fs_err as fs;
+
+		let dot_content = format!(
+			r#"digraph {{
+				fontname="Cantarell"
+				bgcolor="white"
+				label = "orchestra message flow between subsystems"
+node [colorscheme={}]
+{:?}
+}}"#,
+			color_scheme(),
+			&dot
+		);
+
+		let dest = dest.as_ref();
+		let dest = dest.to_path_buf();
+
+		let svg_content = {
+			let mut parser = dotlay::gv::DotParser::new(dot_content.as_str());
+			let graph = parser.process().map_err(|err_msg| {
+				anyhow::anyhow!(dbg!(err_msg)).context("Failed to parse dotfile")
+			})?;
+			let mut svg = dotlay::backends::svg::SVGWriter::new();
+			let mut builder = dotlay::gv::GraphBuilder::default();
+			builder.visit_graph(&graph);
+			let mut vg = builder.get();
+			vg.do_it(false, false, false, &mut svg);
+			svg.finalize()
+		};
+
+		fn write_to_disk(
+			dest: impl AsRef<std::path::Path>,
+			ext: &str,
+			content: impl AsRef<[u8]>,
+		) -> std::io::Result<()> {
+			let dest = dest.as_ref().with_extension(ext);
+			print!("Writing {} to {} ..", ext, dest.display());
+			fs::write(dest, content.as_ref())?;
+			println!(" OK");
+			Ok(())
+		}
+
+		write_to_disk(&dest, "dot", &dot_content)?;
+		write_to_disk(&dest, "svg", &svg_content)?;
+
+		Ok(())
+	}
+
 	/// Render a graphviz (aka dot graph) to a file.
 	///
 	/// Cycles are annotated with the lower
 	#[cfg(feature = "dotgraph")]
-	pub(crate) fn graphviz(self, dest: &mut impl std::io::Write) -> std::io::Result<()> {
+	pub(crate) fn render_graphs<'b>(self, dest: impl AsRef<std::path::Path>) -> anyhow::Result<()> {
 		use self::graph_helpers::*;
 		use petgraph::{
 			dot::{self, Dot},
@@ -251,41 +305,49 @@ impl<'a> ConnectionGraph<'a> {
 		}
 		let unsent_node_label = r#"label="✨",fillcolor=black,shape=doublecircle,style=filled,fontname="NotoColorEmoji""#;
 		let unconsumed_node_label = r#"label="💀",fillcolor=black,shape=doublecircle,style=filled,fontname="NotoColorEmoji""#;
-		let edge_attr = |_graph: &Graph<Ident, Path>,
-		                 edge: <&Graph<Ident, Path> as IntoEdgeReferences>::EdgeRef|
-		 -> String {
-			let source = edge.source();
-			let sink = edge.target();
 
-			let message_name =
-				edge.weight().get_ident().expect("Must have a trailing identifier. qed");
+		let get_edge_attributes = {
+			|_graph: &Graph<Ident, Path>,
+			 edge: <&Graph<Ident, Path> as IntoEdgeReferences>::EdgeRef|
+			 -> String {
+				let source = edge.source();
+				let sink = edge.target();
 
-			// use the intersection only, that's the set of cycles the edge is part of
-			if let Some(edge_intersecting_scc_tags) = scc_lut.get(&source).and_then(|source_set| {
-				scc_lut.get(&sink).and_then(move |sink_set| {
-					let intersection =
-						HashSet::<_, RandomState>::from_iter(source_set.intersection(sink_set));
-					if intersection.is_empty() {
-						None
-					} else {
-						Some(intersection)
+				let message_name =
+					edge.weight().get_ident().expect("Must have a trailing identifier. qed");
+
+				// use the intersection only, that's the set of cycles the edge is part of
+				if let Some(edge_intersecting_scc_tags) =
+					scc_lut.get(&source).and_then(|source_set| {
+						scc_lut.get(&sink).and_then(move |sink_set| {
+							let intersection = HashSet::<_, RandomState>::from_iter(
+								source_set.intersection(sink_set),
+							);
+							if intersection.is_empty() {
+								None
+							} else {
+								Some(intersection)
+							}
+						})
+					}) {
+					if edge_intersecting_scc_tags.len() != 1 {
+						unreachable!(
+							"Strongly connected components are disjunct by definition. qed"
+						);
 					}
-				})
-			}) {
-				if edge_intersecting_scc_tags.len() != 1 {
-					unreachable!("Strongly connected components are disjunct by definition. qed");
+					let scc_tag = edge_intersecting_scc_tags.iter().next().unwrap();
+					let color = get_color_by_tag(scc_tag, color_lut);
+					let scc_tag_str =
+						cycle_tags_to_annotation(edge_intersecting_scc_tags, color_lut);
+					format!(
+						r#"color="{color}",fontcolor="{color}",xlabel=<{scc_tag_str}>,label="{message_name}""#,
+					)
+				} else {
+					format!(r#"label="{message_name}""#,)
 				}
-				let scc_tag = edge_intersecting_scc_tags.iter().next().unwrap();
-				let color = get_color_by_tag(scc_tag, color_lut);
-				let scc_tag_str = cycle_tags_to_annotation(edge_intersecting_scc_tags, color_lut);
-				format!(
-					r#"color="{color}",fontcolor="{color}",xlabel=<{scc_tag_str}>,label="{message_name}""#,
-				)
-			} else {
-				format!(r#"label="{message_name}""#,)
 			}
 		};
-		let node_attr =
+		let get_node_attributes = {
 			|_graph: &Graph<Ident, Path>,
 			 (node_index, subsystem_name): <&Graph<Ident, Path> as IntoNodeReferences>::NodeRef|
 			 -> String {
@@ -310,22 +372,18 @@ impl<'a> ConnectionGraph<'a> {
 				} else {
 					format!(r#"label="{subsystem_name}""#)
 				}
-			};
-		let dot = Dot::with_attr_getters(
-			&graph, config, &edge_attr, // with state, the reference is a trouble maker
-			&node_attr,
+			}
+		};
+		// let graph = Box::new(graph);
+		let dotgraph = Dot::with_attr_getters(
+			&graph,
+			config,
+			&get_edge_attributes, // with state, the reference is a trouble maker
+			&get_node_attributes,
 		);
-		dest.write_all(
-			format!(
-				r#"digraph {{
-	node [colorscheme={}]
-	{:?}
-}}"#,
-				color_scheme(),
-				&dot
-			)
-			.as_bytes(),
-		)?;
+
+		Self::convert_and_write_all(&dotgraph, dest)?;
+
 		Ok(())
 	}
 }
