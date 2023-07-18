@@ -14,9 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! Metered variant of bounded mpsc channels to be able to extract metrics.
+#[cfg(feature = "async_channel")]
+use async_channel::{
+	bounded as bounded_channel, Receiver, Sender, TryRecvError, TrySendError as ChannelTrySendError,
+};
 
-use async_channel::{bounded, RecvError, TryRecvError};
+#[cfg(feature = "futures_channel")]
+use futures::{
+	channel::mpsc::channel as bounded_channel,
+	channel::mpsc::{Receiver, Sender, TryRecvError},
+	sink::SinkExt,
+};
+
 use futures::{
 	stream::Stream,
 	task::{Context, Poll},
@@ -24,11 +33,11 @@ use futures::{
 use std::{pin::Pin, result};
 
 use super::{measure_tof_check, CoarseInstant, MaybeTimeOfFlight, Meter};
-pub use async_channel::TrySendError;
 
 /// Create a wrapped `mpsc::channel` pair of `MeteredSender` and `MeteredReceiver`.
 pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
-	let (tx, rx) = bounded::<MaybeTimeOfFlight<T>>(capacity);
+	let (tx, rx) = bounded_channel::<MaybeTimeOfFlight<T>>(capacity);
+
 	let shared_meter = Meter::default();
 	let tx = MeteredSender { meter: shared_meter.clone(), inner: tx };
 	let rx = MeteredReceiver { meter: shared_meter, inner: rx };
@@ -40,27 +49,82 @@ pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
 pub struct MeteredReceiver<T> {
 	// count currently contained messages
 	meter: Meter,
-	inner: async_channel::Receiver<MaybeTimeOfFlight<T>>,
+	inner: Receiver<MaybeTimeOfFlight<T>>,
 }
 
 /// A bounded channel error
 #[derive(thiserror::Error, Debug)]
 pub enum SendError<T> {
-	#[error("Bounded channel has been disconnected")]
-	Disconnected(T),
+	#[error("Bounded channel has been closed")]
+	Closed(T),
+	#[error("Bounded channel has been closed and the original message is lost")]
+	Terminated,
 }
 
 impl<T> SendError<T> {
 	/// Returns the inner value.
-	pub fn into_inner(self) -> T {
+	pub fn into_inner(self) -> Option<T> {
 		match self {
-			Self::Disconnected(t) => t,
+			Self::Closed(t) => Some(t),
+			Self::Terminated => None,
 		}
 	}
 }
 
+/// A bounded channel error when trying to send a message (transparently wraps the inner error type)
+#[derive(thiserror::Error, Debug)]
+pub enum TrySendError<T> {
+	#[error("Bounded channel has been closed")]
+	Closed(T),
+	#[error("Bounded channel is full")]
+	Full(T),
+}
+
+impl<T> TrySendError<T> {
+	/// Returns the inner value.
+	pub fn into_inner(self) -> T {
+		match self {
+			Self::Closed(t) => t,
+			Self::Full(t) => t,
+		}
+	}
+
+	/// Returns `true` if we could not send to channel as it was full
+	pub fn is_full(&self) -> bool {
+		match self {
+			Self::Closed(_) => false,
+			Self::Full(_) => true,
+		}
+	}
+
+	/// Returns `true` if we could not send to channel as it was disconnected
+	pub fn is_disconnected(&self) -> bool {
+		match self {
+			Self::Closed(_) => true,
+			Self::Full(_) => false,
+		}
+	}
+}
+
+/// Error when receiving from a closed bounded channel
+#[derive(thiserror::Error, PartialEq, Eq, Clone, Copy, Debug)]
+pub struct RecvError {}
+
+impl std::fmt::Display for RecvError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "receiving from an empty and closed channel")
+	}
+}
+
+#[cfg(feature = "async_channel")]
+impl From<async_channel::RecvError> for RecvError {
+	fn from(_: async_channel::RecvError) -> Self {
+		RecvError {}
+	}
+}
+
 impl<T> std::ops::Deref for MeteredReceiver<T> {
-	type Target = async_channel::Receiver<MaybeTimeOfFlight<T>>;
+	type Target = Receiver<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -75,7 +139,7 @@ impl<T> std::ops::DerefMut for MeteredReceiver<T> {
 impl<T> Stream for MeteredReceiver<T> {
 	type Item = T;
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		match async_channel::Receiver::poll_next(Pin::new(&mut self.inner), cx) {
+		match Receiver::poll_next(Pin::new(&mut self.inner), cx) {
 			Poll::Ready(maybe_value) => Poll::Ready(self.maybe_meter_tof(maybe_value)),
 			Poll::Pending => Poll::Pending,
 		}
@@ -111,6 +175,16 @@ impl<T> MeteredReceiver<T> {
 	}
 
 	/// Attempt to receive the next item.
+	#[cfg(feature = "futures_channel")]
+	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
+		match self.inner.try_next()? {
+			Some(value) => Ok(self.maybe_meter_tof(Some(value))),
+			None => Ok(None),
+		}
+	}
+
+	/// Attempt to receive the next item.
+	#[cfg(feature = "async_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		match self.inner.try_recv() {
 			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
@@ -119,15 +193,17 @@ impl<T> MeteredReceiver<T> {
 	}
 
 	/// Receive the next item.
+	#[cfg(feature = "async_channel")]
 	pub async fn recv(&mut self) -> Result<T, RecvError> {
 		match self.inner.recv().await {
 			Ok(value) =>
 				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
-			Err(err) => Err(err),
+			Err(err) => Err(err.into()),
 		}
 	}
 
 	/// Attempt to receive the next item without blocking
+	#[cfg(feature = "async_channel")]
 	pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
 		match self.inner.try_recv() {
 			Ok(value) =>
@@ -136,6 +212,7 @@ impl<T> MeteredReceiver<T> {
 		}
 	}
 
+	#[cfg(feature = "async_channel")]
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
@@ -153,7 +230,7 @@ impl<T> futures::stream::FusedStream for MeteredReceiver<T> {
 #[derive(Debug)]
 pub struct MeteredSender<T> {
 	meter: Meter,
-	inner: async_channel::Sender<MaybeTimeOfFlight<T>>,
+	inner: Sender<MaybeTimeOfFlight<T>>,
 }
 
 impl<T> Clone for MeteredSender<T> {
@@ -163,7 +240,7 @@ impl<T> Clone for MeteredSender<T> {
 }
 
 impl<T> std::ops::Deref for MeteredSender<T> {
-	type Target = async_channel::Sender<MaybeTimeOfFlight<T>>;
+	type Target = Sender<MaybeTimeOfFlight<T>>;
 	fn deref(&self) -> &Self::Target {
 		&self.inner
 	}
@@ -199,35 +276,76 @@ impl<T> MeteredSender<T> {
 		match self.try_send(msg) {
 			Err(send_err) => {
 				if !send_err.is_full() {
-					return Err(SendError::Disconnected(send_err.into_inner().into()))
+					return Err(SendError::Closed(send_err.into_inner().into()))
 				}
 
 				self.meter.note_blocked();
 				self.meter.note_sent(); // we are going to do full blocking send, so we have to note it here
 				let msg = send_err.into_inner().into();
-				let fut = self.inner.send(msg);
-				futures::pin_mut!(fut);
-				fut.await.map_err(|err| {
-					self.meter.retract_sent();
-					SendError::Disconnected(err.0.into())
-				})
+				self.send_to_channel(msg).await
 			},
 			_ => Ok(()),
 		}
 	}
 
+	// A helper routine to send a message to the channel after `try_send` returned that a channel is full
+	#[cfg(feature = "async_channel")]
+	async fn send_to_channel(
+		&mut self,
+		msg: MaybeTimeOfFlight<T>,
+	) -> result::Result<(), SendError<T>> {
+		let fut = self.inner.send(msg);
+		futures::pin_mut!(fut);
+		fut.await.map_err(|err| {
+			self.meter.retract_sent();
+			SendError::Closed(err.0.into())
+		})
+	}
+
+	#[cfg(feature = "futures_channel")]
+	async fn send_to_channel(
+		&mut self,
+		msg: MaybeTimeOfFlight<T>,
+	) -> result::Result<(), SendError<T>> {
+		let fut = self.inner.send(msg);
+		futures::pin_mut!(fut);
+		fut.await.map_err(|_| {
+			self.meter.retract_sent();
+			// Futures channel does not provide a way to save the original message,
+			// so to avoid `T: Clone` bound we just return a generic error
+			SendError::Terminated
+		})
+	}
+
+	#[cfg(feature = "futures_channel")]
+	/// Attempt to send message or fail immediately.
+	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
+		let msg = self.prepare_with_tof(msg); // note_sent is called in here
+		self.inner.try_send(msg).map_err(|e| {
+			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
+			if e.is_full() {
+				TrySendError::Full(e.into_inner().into())
+			} else {
+				TrySendError::Closed(e.into_inner().into())
+			}
+		})
+	}
+
+	#[cfg(feature = "async_channel")]
 	/// Attempt to send message or fail immediately.
 	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
 		let msg = self.prepare_with_tof(msg); // note_sent is called in here
 		self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
 			match e {
-				TrySendError::Full(inner_error) => TrySendError::Full(inner_error.into()),
-				TrySendError::Closed(inner_error) => TrySendError::Closed(inner_error.into()),
+				ChannelTrySendError::Full(inner_error) => TrySendError::Full(inner_error.into()),
+				ChannelTrySendError::Closed(inner_error) =>
+					TrySendError::Closed(inner_error.into()),
 			}
 		})
 	}
 
+	#[cfg(feature = "async_channel")]
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
