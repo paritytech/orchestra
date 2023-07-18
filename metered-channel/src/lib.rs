@@ -17,6 +17,12 @@
 //! Metered variant of mpsc channels to be able to extract metrics.
 #![allow(clippy::all)]
 
+#[cfg(all(feature = "async_channel", feature = "futures_channel",))]
+compile_error!("`async_channel` and `futures_channel` are mutually exclusive features");
+
+#[cfg(not(any(feature = "async_channel", feature = "futures_channel")))]
+compile_error!("Must build with either `async_channel` or `futures_channel` features");
+
 use std::sync::{
 	atomic::{AtomicUsize, Ordering},
 	Arc,

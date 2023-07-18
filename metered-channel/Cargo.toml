@@ -1,6 +1,6 @@
 [package]
 name = "prioritized-metered-channel"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Channels with built-in observability and message priorizitazion (coming soon™)"
@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 futures = "0.3.21"
 futures-timer = "3.0.2"
-async-channel = "1.8.0"
+async-channel = { version = "1.8.0", optional = true }
 derive_more = "0.99"
 tracing = "0.1.35"
 thiserror = "1.0.31"
@@ -26,3 +26,9 @@ assert_matches = "1.5"
 env_logger = "0.9"
 log = "0.4"
 tracing = { version = "0.1.35", features = ["log"] }
+
+[features]
+default = ["async_channel"]
+async_channel = ["dep:async-channel"]
+futures_channel = []
+

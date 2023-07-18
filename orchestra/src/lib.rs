@@ -89,6 +89,9 @@ use std::sync::{
 pub use std::time::Duration;
 
 #[doc(hidden)]
+pub use metered::TrySendError;
+
+#[doc(hidden)]
 pub use futures_timer::Delay;
 
 use std::fmt;
