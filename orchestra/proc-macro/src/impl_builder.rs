@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use quote::{format_ident, quote};
-use syn::{parse_quote, Path, PathSegment, TypePath};
+use syn::{parse_quote, Path, PathSegment, Type, TypePath};
 
 use super::*;
 
@@ -158,6 +158,10 @@ pub(crate) fn impl_feature_gated_items(
 	let subsystem_name = &cfg_set.subsystem_names_without_wip();
 	let subsystem_generics = &cfg_set.subsystem_generic_types();
 	let consumes = &cfg_set.consumes_without_wip();
+	let maybe_boxed_consumes = consumes
+		.iter()
+		.map(|consume| info.box_message_if_needed(consume, Span::call_site()))
+		.collect::<Vec<_>>();
 	let channel_name = &cfg_set.channel_names_without_wip(None);
 	let channel_name_unbounded = &cfg_set.channel_names_without_wip("_unbounded");
 	let message_channel_capacity =
@@ -446,15 +450,15 @@ pub(crate) fn impl_feature_gated_items(
 		.iter()
 		.map(|ssf| {
 			let field_type = &ssf.generic;
-			let consumes = &ssf.message_to_consume();
+			let message_to_consume = &ssf.message_to_consume();
 			let subsystem_sender_trait = format_ident!("{}SenderTrait", ssf.generic);
 			let subsystem_ctx_trait = format_ident!("{}ContextTrait", ssf.generic);
 			quote! {
 				#field_type:
-					#support_crate::Subsystem< #subsystem_ctx_name < #consumes>, #error_ty>,
-				<#subsystem_ctx_name< #consumes > as #subsystem_ctx_trait>::Sender:
+					#support_crate::Subsystem< #subsystem_ctx_name < #message_to_consume>, #error_ty>,
+				<#subsystem_ctx_name< #message_to_consume > as #subsystem_ctx_trait>::Sender:
 					#subsystem_sender_trait,
-				#subsystem_ctx_name< #consumes >:
+				#subsystem_ctx_name< #message_to_consume >:
 					#subsystem_ctx_trait,
 			}
 		})
@@ -632,7 +636,7 @@ pub(crate) fn impl_feature_gated_items(
 					let (#channel_name_tx, #channel_name_rx)
 					=
 						#support_crate ::metered::channel::<
-							MessagePacket< #consumes >
+							MessagePacket< #maybe_boxed_consumes >
 						>(
 							self.channel_capacity.unwrap_or(#message_channel_capacity)
 						);
@@ -641,7 +645,7 @@ pub(crate) fn impl_feature_gated_items(
 				#(
 					let (#channel_name_unbounded_tx, #channel_name_unbounded_rx) =
 						#support_crate ::metered::unbounded::<
-							MessagePacket< #consumes >
+							MessagePacket< #maybe_boxed_consumes >
 						>();
 				)*
 
@@ -672,7 +676,7 @@ pub(crate) fn impl_feature_gated_items(
 
 					let unbounded_meter = #channel_name_unbounded_rx.meter().clone();
 					// Prefer unbounded channel when selecting
-					let message_rx: SubsystemIncomingMessages< #consumes > = #support_crate ::select_with_strategy(
+					let message_rx: SubsystemIncomingMessages< #maybe_boxed_consumes > = #support_crate ::select_with_strategy(
 						#channel_name_rx, #channel_name_unbounded_rx,
 						#support_crate ::select_message_channel_strategy
 					);
@@ -739,6 +743,11 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 	let signal = &info.extern_signal_ty;
 	let error_ty = &info.extern_error_ty;
 	let support_crate = info.support_crate_name();
+	let maybe_boxed_message_generic: Type = if info.boxed_messages {
+		parse_quote! { ::std::boxed::Box<M> }
+	} else {
+		parse_quote! { M }
+	};
 
 	let ts = quote! {
 		/// Task kind to launch.
@@ -767,7 +776,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		#[allow(clippy::too_many_arguments)]
 		pub fn spawn<S, M, TK, Ctx, E, SubSys>(
 			spawner: &mut S,
-			message_tx: #support_crate ::metered::MeteredSender<MessagePacket<M>>,
+			message_tx: #support_crate ::metered::MeteredSender<MessagePacket<#maybe_boxed_message_generic>>,
 			signal_tx: #support_crate ::metered::MeteredSender< #signal >,
 			// meter for the unbounded channel
 			unbounded_meter: #support_crate ::metered::Meter,

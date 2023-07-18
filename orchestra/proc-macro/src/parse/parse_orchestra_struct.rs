@@ -28,8 +28,9 @@ use syn::{
 	spanned::Spanned,
 	token,
 	token::Bracket,
-	AttrStyle, Error, Field, FieldsNamed, GenericParam, Ident, ItemStruct, LitInt, Path,
-	PathSegment, Result, Token, Type, Visibility,
+	AngleBracketedGenericArguments, AttrStyle, Error, Field, FieldsNamed, GenericArgument,
+	GenericParam, Ident, ItemStruct, LitInt, Path, PathArguments, PathSegment, Result, Token, Type,
+	TypePath, Visibility,
 };
 
 mod kw {
@@ -426,6 +427,8 @@ pub(crate) struct OrchestraInfo {
 	pub(crate) message_channel_capacity: usize,
 	/// Size of the bounded signal channel.
 	pub(crate) signal_channel_capacity: usize,
+	/// Box messages that are sent to the subsystems.
+	pub(crate) boxed_messages: bool,
 
 	/// Signals to be sent, sparse information that is used intermittently.
 	pub(crate) extern_signal_ty: Path,
@@ -613,6 +616,24 @@ impl OrchestraInfo {
 
 	pub(crate) fn consumes_without_wip(&self) -> Vec<Path> {
 		consumes_without_wip(&self.subsystems)
+	}
+
+	pub(crate) fn box_message_if_needed(&self, message_ty: &Path, span: Span) -> Path {
+		if self.boxed_messages {
+			let mut boxed_message = PathSegment::from(Ident::new("Box", span.clone()));
+			boxed_message.arguments =
+				PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+					colon2_token: None,
+					lt_token: Token![<](span.clone()),
+					args: Punctuated::from_iter(std::iter::once(GenericArgument::Type(
+						Type::Path(TypePath { path: message_ty.clone(), qself: None }),
+					))),
+					gt_token: Token![>](span.clone()),
+				});
+			Path::from(boxed_message)
+		} else {
+			message_ty.clone()
+		}
 	}
 }
 

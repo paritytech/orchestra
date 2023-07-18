@@ -14,6 +14,7 @@
 // limitations under the License.
 
 use quote::quote;
+use syn::Type;
 
 use super::*;
 
@@ -193,6 +194,18 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 	let error_ty = &info.extern_error_ty;
 	let support_crate = info.support_crate_name();
 
+	let maybe_boxed_message_generic: Type = if info.boxed_messages {
+		parse_quote! { ::std::boxed::Box<M> }
+	} else {
+		parse_quote! { M }
+	};
+
+	let maybe_boxed_message = if info.boxed_messages {
+		quote! { ::std::boxed::Box::new(message) }
+	} else {
+		quote! { message }
+	};
+
 	let ts = quote::quote! {
 		/// A subsystem that the orchestrator orchestrates.
 		///
@@ -204,7 +217,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 		pub struct OrchestratedSubsystem<M> {
 			/// The instance.
 			pub instance: std::option::Option<
-				#support_crate ::SubsystemInstance<M, #signal>
+				#support_crate ::SubsystemInstance<#maybe_boxed_message_generic, #signal>
 			>,
 		}
 
@@ -218,7 +231,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 				if let Some(ref mut instance) = self.instance {
 					match instance.tx_bounded.send(MessagePacket {
 						signals_received: instance.signals_received,
-						message,
+						message: #maybe_boxed_message,
 					}).timeout(MESSAGE_TIMEOUT).await
 					{
 						None => {

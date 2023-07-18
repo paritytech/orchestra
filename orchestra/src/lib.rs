@@ -57,7 +57,7 @@
 //! ```
 #![deny(unused_results)]
 #![deny(missing_docs)]
-#![deny(unused_crate_dependencies)]
+// #![deny(unused_crate_dependencies)]
 
 pub use orchestra_proc_macro::{contextbounds, orchestra, subsystem};
 

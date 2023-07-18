@@ -63,7 +63,7 @@ impl<Context> Fortified {
 	}
 }
 
-#[orchestra(signal=SigSigSig, event=EvX, error=Yikes, gen=AllMessages)]
+#[orchestra(signal=SigSigSig, event=EvX, error=Yikes, gen=AllMessages, boxed_messages=true)]
 struct Duo<T, U, V, W> {
 	#[subsystem(consumes: MsgStrukt, sends: [Plinko], message_capacity: 32768, signal_capacity: 128)]
 	sub0: Awesome,

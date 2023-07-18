@@ -25,7 +25,22 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 	let channel_name = &info.channel_names_without_wip(None);
 	let channel_name_unbounded = &info.channel_names_without_wip("_unbounded");
 
-	let consumes = &info.consumes_without_wip();
+	let maybe_boxed_consumes = info
+		.consumes_without_wip()
+		.iter()
+		.map(|consume| info.box_message_if_needed(consume, Span::call_site()))
+		.collect::<Vec<_>>();
+
+	let maybe_boxed_send = if info.boxed_messages {
+		quote! { ::std::boxed::Box::new(inner) }
+	} else {
+		quote! { inner }
+	};
+	let maybe_unbox_error = if info.boxed_messages {
+		quote! { *err_inner.message }
+	} else {
+		quote! { err_inner.message }
+	};
 
 	let consumes_variant = &info.variant_names_without_wip();
 	let unconsumes_variant = &info.variant_names_only_wip();
@@ -44,7 +59,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				#feature_gates
 				pub #channel_name:
 					#support_crate ::metered::MeteredSender<
-						MessagePacket< #consumes >
+						MessagePacket< #maybe_boxed_consumes >
 					>,
 			)*
 
@@ -53,7 +68,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				#feature_gates
 				pub #channel_name_unbounded:
 					#support_crate ::metered::UnboundedMeteredSender<
-						MessagePacket< #consumes >
+						MessagePacket< #maybe_boxed_consumes >
 					>,
 			)*
 		}
@@ -72,7 +87,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
 						self. #channel_name .send(
-							#support_crate ::make_packet(signals_received, inner)
+							#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 						).await.map_err(|_| stringify!( #channel_name ))
 					}
 				)*
@@ -111,10 +126,10 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
 						self. #channel_name .try_send(
-							#support_crate ::make_packet(signals_received, inner)
+							#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 						).map_err(|err| match err {
-								#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( err_inner.message )),
-								#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( err_inner.message )),
+								#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+								#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
 						})
 					}
 				)*
@@ -147,7 +162,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 					#feature_gates
 					#message_wrapper :: #consumes_variant (inner) => {
 						self. #channel_name_unbounded .unbounded_send(
-							#support_crate ::make_packet(signals_received, inner)
+							#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 						)
 						.map_err(|_| stringify!( #channel_name ))
 					},

@@ -23,6 +23,7 @@ mod kw {
 	syn::custom_keyword!(message_capacity);
 	syn::custom_keyword!(subsystem);
 	syn::custom_keyword!(prefix);
+	syn::custom_keyword!(boxed_messages);
 }
 mod parse_cfg;
 mod parse_orchestra_attr;
