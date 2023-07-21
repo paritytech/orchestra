@@ -31,4 +31,3 @@ tracing = { version = "0.1.35", features = ["log"] }
 default = ["async_channel"]
 async_channel = ["dep:async-channel"]
 futures_channel = []
-

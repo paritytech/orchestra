@@ -22,7 +22,7 @@ use async_channel::{
 #[cfg(feature = "futures_channel")]
 use futures::{
 	channel::mpsc::channel as bounded_channel,
-	channel::mpsc::{Receiver, Sender, TryRecvError},
+	channel::mpsc::{Receiver, Sender, TryRecvError, TrySendError as FuturesTrySendError},
 	sink::SinkExt,
 };
 
@@ -78,6 +78,30 @@ pub enum TrySendError<T> {
 	Closed(T),
 	#[error("Bounded channel is full")]
 	Full(T),
+}
+
+#[cfg(feature = "async_channel")]
+impl<T> From<ChannelTrySendError<MaybeTimeOfFlight<T>>> for TrySendError<T> {
+	fn from(error: ChannelTrySendError<MaybeTimeOfFlight<T>>) -> Self {
+		match error {
+			ChannelTrySendError::Closed(val) => Self::Closed(val.into()),
+			ChannelTrySendError::Full(val) => Self::Full(val.into()),
+		}
+	}
+}
+
+#[cfg(feature = "futures_channel")]
+impl<T> From<FuturesTrySendError<MaybeTimeOfFlight<T>>> for TrySendError<T> {
+	fn from(error: FuturesTrySendError<MaybeTimeOfFlight<T>>) -> Self {
+		let disconnected = error.is_disconnected();
+		let val = error.into_inner();
+		let val = val.into();
+		if disconnected {
+			Self::Closed(val)
+		} else {
+			Self::Full(val)
+		}
+	}
 }
 
 impl<T> TrySendError<T> {
@@ -323,11 +347,7 @@ impl<T> MeteredSender<T> {
 		let msg = self.prepare_with_tof(msg); // note_sent is called in here
 		self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
-			if e.is_full() {
-				TrySendError::Full(e.into_inner().into())
-			} else {
-				TrySendError::Closed(e.into_inner().into())
-			}
+			TrySendError::from(e)
 		})
 	}
 
@@ -337,11 +357,7 @@ impl<T> MeteredSender<T> {
 		let msg = self.prepare_with_tof(msg); // note_sent is called in here
 		self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
-			match e {
-				ChannelTrySendError::Full(inner_error) => TrySendError::Full(inner_error.into()),
-				ChannelTrySendError::Closed(inner_error) =>
-					TrySendError::Closed(inner_error.into()),
-			}
+			TrySendError::from(e)
 		})
 	}
 

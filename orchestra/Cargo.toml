@@ -39,7 +39,7 @@ name = "bench_main"
 harness = false
 
 [features]
-default = ["deny_unconsumed_messages","deny_unsent_messages","async_channel"]
+default = ["deny_unconsumed_messages", "deny_unsent_messages", "async_channel"]
 # Generate a file containing the generated code that
 # is used via `include_str!`.
 expand = ["orchestra-proc-macro/expand"]
