@@ -90,12 +90,35 @@ impl<T> From<ChannelTrySendError<MaybeTimeOfFlight<T>>> for TrySendError<T> {
 	}
 }
 
+#[cfg(feature = "async_channel")]
+impl<T> From<ChannelTrySendError<T>> for TrySendError<T> {
+	fn from(error: ChannelTrySendError<T>) -> Self {
+		match error {
+			ChannelTrySendError::Closed(val) => Self::Closed(val),
+			ChannelTrySendError::Full(val) => Self::Full(val),
+		}
+	}
+}
+
 #[cfg(feature = "futures_channel")]
 impl<T> From<FuturesTrySendError<MaybeTimeOfFlight<T>>> for TrySendError<T> {
 	fn from(error: FuturesTrySendError<MaybeTimeOfFlight<T>>) -> Self {
 		let disconnected = error.is_disconnected();
 		let val = error.into_inner();
 		let val = val.into();
+		if disconnected {
+			Self::Closed(val)
+		} else {
+			Self::Full(val)
+		}
+	}
+}
+
+#[cfg(feature = "futures_channel")]
+impl<T> From<FuturesTrySendError<T>> for TrySendError<T> {
+	fn from(error: FuturesTrySendError<T>) -> Self {
+		let disconnected = error.is_disconnected();
+		let val = error.into_inner();
 		if disconnected {
 			Self::Closed(val)
 		} else {
