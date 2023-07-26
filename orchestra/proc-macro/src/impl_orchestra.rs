@@ -131,8 +131,8 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			}
 
 			/// Broadcast a signal to all subsystems.
-			pub async fn broadcast_signal(&mut self, signal: #signal_ty) -> ::std::result::Result<(), #error_ty > {
-				let mut delayed_signals : #support_crate ::futures::stream::FuturesUnordered<::std::pin::Pin<::std::boxed::Box<dyn #support_crate::futures::Future<Output = ::std::result::Result<(), #error_ty>>>>>
+			pub async fn broadcast_signal<'a>(&'a mut self, signal: #signal_ty) -> ::std::result::Result<(), #error_ty > {
+				let mut delayed_signals : #support_crate ::futures::stream::FuturesUnordered< #support_crate ::futures::future::BoxFuture<'a, ::std::result::Result<(), #error_ty>>>
 					= #support_crate ::futures::stream::FuturesUnordered::new();
 				#(
 					// Use fast path if possible.
