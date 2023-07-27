@@ -151,6 +151,29 @@ impl<T> TrySendError<T> {
 			Self::Full(_) => false,
 		}
 	}
+
+	/// Transform the inner value.
+	pub fn transform_inner<U, F>(self, f: F) -> TrySendError<U>
+	where
+		F: FnOnce(T) -> U,
+	{
+		match self {
+			Self::Closed(t) => TrySendError::<U>::Closed(f(t)),
+			Self::Full(t) => TrySendError::<U>::Full(f(t)),
+		}
+	}
+
+	/// Transform the inner value, failable version.
+	pub fn try_transform_inner<U, F, E>(self, f: F) -> std::result::Result<TrySendError<U>, E>
+	where
+		F: FnOnce(T) -> std::result::Result<U, E>,
+		E: std::fmt::Debug + std::error::Error + Send + Sync + 'static,
+	{
+		Ok(match self {
+			Self::Closed(t) => TrySendError::<U>::Closed(f(t)?),
+			Self::Full(t) => TrySendError::<U>::Full(f(t)?),
+		})
+	}
 }
 
 /// Error when receiving from a closed bounded channel
