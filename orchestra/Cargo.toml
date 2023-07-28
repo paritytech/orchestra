@@ -23,7 +23,7 @@ dyn-clonable = "0.9"
 [dev-dependencies]
 trybuild = "1.0.61"
 rustversion = "1.0.6"
-criterion = { version = "0.4.0" }
+criterion = { version = "0.5" }
 futures = { version = "0.3", features = ["thread-pool"] }
 
 [[example]]
