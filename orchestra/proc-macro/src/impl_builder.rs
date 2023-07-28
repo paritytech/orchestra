@@ -135,7 +135,7 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 
 			impl<T> ::std::default::Default for Missing<T> {
 				fn default() -> Self {
-					Missing::<T>(::core::marker::PhantomData::<T>::default())
+					Missing::<T>(::core::marker::PhantomData)
 				}
 			}
 	});

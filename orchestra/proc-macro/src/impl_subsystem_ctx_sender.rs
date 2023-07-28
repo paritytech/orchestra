@@ -255,7 +255,7 @@ pub(crate) fn impl_subsystem_sender(
 				Self {
 					channels: self.channels.clone(),
 					signals_received: self.signals_received.clone(),
-					_phantom: ::core::marker::PhantomData::default(),
+					_phantom: ::core::marker::PhantomData,
 				}
 			}
 		}
@@ -686,7 +686,7 @@ pub(crate) fn impl_subsystem_context(
 					to_subsystems: #subsystem_sender_name :: < <M as AssociateOutgoing>::OutgoingMessages > {
 						channels: to_subsystems,
 						signals_received: signals_received.clone(),
-						_phantom: ::core::marker::PhantomData::default(),
+						_phantom: ::core::marker::PhantomData,
 					},
 					to_orchestra,
 					signals_received,
