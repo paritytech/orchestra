@@ -91,9 +91,9 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			>,
 
 			/// Gather running subsystems' outbound streams into one.
-			to_orchestra_rx: #support_crate ::stream::Fuse<
+			to_orchestra_rx: Option<#support_crate ::stream::Fuse<
 				#support_crate ::metered::UnboundedMeteredReceiver< #support_crate ::ToOrchestra >
-			>,
+			>>,
 
 			/// Events that are sent to the orchestra from the outside world.
 			events_rx: #support_crate ::metered::MeteredReceiver< #event_ty >,

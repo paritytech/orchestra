@@ -710,7 +710,7 @@ pub(crate) fn impl_feature_gated_items(
 
 				use #support_crate ::StreamExt;
 
-				let to_orchestra_rx = to_orchestra_rx.fuse();
+				let to_orchestra_rx = Some(to_orchestra_rx.fuse());
 				let orchestra = #orchestra_name {
 					#(
 						#subsystem_name,
