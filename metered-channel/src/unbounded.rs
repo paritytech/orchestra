@@ -84,7 +84,7 @@ impl<T> Stream for UnboundedMeteredReceiver<T> {
 impl<T> UnboundedMeteredReceiver<T> {
 	fn maybe_meter_tof(&mut self, maybe_value: Option<MaybeTimeOfFlight<T>>) -> Option<T> {
 		self.meter.note_received();
-		maybe_value.map(|value| {
+		let result = maybe_value.map(|value| {
 			match value {
 				MaybeTimeOfFlight::<T>::WithTimeOfFlight(value, tof_start) => {
 					// do not use `.elapsed()` of `std::time`, it may panic
@@ -96,7 +96,12 @@ impl<T> UnboundedMeteredReceiver<T> {
 				MaybeTimeOfFlight::<T>::Bare(value) => value,
 			}
 			.into()
-		})
+		});
+
+		#[cfg(feature = "async_channel")]
+		self.meter.note_channel_len(self.inner.len());
+
+		result
 	}
 
 	/// Get an updated accessor object for all metrics collected.
@@ -170,6 +175,10 @@ impl<T> UnboundedMeteredSender<T> {
 		} else {
 			MaybeTimeOfFlight::Bare(item)
 		};
+
+		#[cfg(feature = "async_channel")]
+		self.meter.note_channel_len(self.inner.len());
+
 		item
 	}
 

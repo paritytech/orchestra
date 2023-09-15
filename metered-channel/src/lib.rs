@@ -107,17 +107,25 @@ impl Meter {
 	}
 
 	fn note_sent(&self) -> usize {
+		#[cfg(feature = "futures_channel")]
 		self.channel_len.fetch_add(1, Ordering::Relaxed);
 		self.sent.fetch_add(1, Ordering::Relaxed)
 	}
 
 	fn retract_sent(&self) {
 		self.sent.fetch_sub(1, Ordering::Relaxed);
+		#[cfg(feature = "futures_channel")]
 		self.channel_len.fetch_add(1, Ordering::Relaxed);
+	}
+
+	#[cfg(feature = "async_channel")]
+	fn note_channel_len(&self, len: usize) {
+		self.channel_len.store(len, Ordering::Relaxed);
 	}
 
 	fn note_received(&self) {
 		self.received.fetch_add(1, Ordering::Relaxed);
+		#[cfg(feature = "futures_channel")]
 		self.channel_len.fetch_sub(1, Ordering::Relaxed);
 	}
 
