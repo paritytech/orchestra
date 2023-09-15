@@ -39,12 +39,12 @@ fn try_send_try_next() {
 		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 1, .. });
 		rx.try_next().unwrap();
 		rx.try_next().unwrap();
-		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 3, blocked: 0, tof } => {
+		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 3,  channel_len: 1, blocked: 0, tof } => {
 			// every second in test, consumed before
 			assert_eq!(dbg!(tof).len(), 1);
 		});
 		rx.try_next().unwrap();
-		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 4, blocked: 0, tof } => {
+		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 4,  channel_len: 0, blocked: 0, tof } => {
 			// every second in test, consumed before
 			assert_eq!(dbg!(tof).len(), 0);
 		});
@@ -68,12 +68,12 @@ fn try_send_try_next_unbounded() {
 		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 1, .. });
 		rx.try_next().unwrap();
 		rx.try_next().unwrap();
-		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 3, blocked: 0, tof } => {
+		assert_matches!(tx.meter().read(), Readout { sent: 4,  channel_len: 1, received: 3, blocked: 0, tof } => {
 			// every second in test, consumed before
 			assert_eq!(dbg!(tof).len(), 1);
 		});
 		rx.try_next().unwrap();
-		assert_matches!(rx.meter().read(), Readout { sent: 4, received: 4, blocked: 0, tof } => {
+		assert_matches!(rx.meter().read(), Readout { sent: 4, channel_len: 0, received: 4, blocked: 0, tof } => {
 			// every second in test, consumed before
 			assert_eq!(dbg!(tof).len(), 0);
 		});
