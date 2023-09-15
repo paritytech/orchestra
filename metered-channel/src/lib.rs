@@ -49,6 +49,8 @@ pub struct Meter {
 	sent: Arc<AtomicUsize>,
 	// Number of receives on this channel.
 	received: Arc<AtomicUsize>,
+	// Approximative number of elements in queue.
+	channel_len: Arc<AtomicUsize>,
 	// Number of times senders blocked while sending messages to a subsystem.
 	blocked: Arc<AtomicUsize>,
 	// Atomic ringbuffer of the last 50 time of flight values
@@ -60,6 +62,7 @@ impl std::default::Default for Meter {
 		Self {
 			sent: Arc::new(AtomicUsize::new(0)),
 			received: Arc::new(AtomicUsize::new(0)),
+			channel_len: Arc::new(AtomicUsize::new(0)),
 			blocked: Arc::new(AtomicUsize::new(0)),
 			tof: Arc::new(crossbeam_queue::ArrayQueue::new(100)),
 		}
@@ -75,6 +78,8 @@ pub struct Readout {
 	pub sent: usize,
 	/// The amount of messages received on the channel, in aggregate.
 	pub received: usize,
+	/// An approximation of the queue size.
+	pub channel_len: usize,
 	/// How many times the caller blocked when sending messages.
 	pub blocked: usize,
 	/// Time of flight in micro seconds (us)
@@ -89,6 +94,7 @@ impl Meter {
 		Readout {
 			sent: self.sent.load(Ordering::Relaxed),
 			received: self.received.load(Ordering::Relaxed),
+			channel_len: self.channel_len.load(Ordering::Relaxed),
 			blocked: self.blocked.load(Ordering::Relaxed),
 			tof: {
 				let mut acc = Vec::with_capacity(self.tof.len());
@@ -101,15 +107,18 @@ impl Meter {
 	}
 
 	fn note_sent(&self) -> usize {
+		self.channel_len.fetch_add(1, Ordering::Relaxed);
 		self.sent.fetch_add(1, Ordering::Relaxed)
 	}
 
 	fn retract_sent(&self) {
 		self.sent.fetch_sub(1, Ordering::Relaxed);
+		self.channel_len.fetch_add(1, Ordering::Relaxed);
 	}
 
 	fn note_received(&self) {
 		self.received.fetch_add(1, Ordering::Relaxed);
+		self.channel_len.fetch_sub(1, Ordering::Relaxed);
 	}
 
 	fn note_blocked(&self) {
