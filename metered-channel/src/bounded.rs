@@ -225,7 +225,7 @@ impl<T> MeteredReceiver<T> {
 	fn maybe_meter_tof(&mut self, maybe_value: Option<MaybeTimeOfFlight<T>>) -> Option<T> {
 		self.meter.note_received();
 
-		let result = maybe_value.map(|value| {
+		maybe_value.map(|value| {
 			match value {
 				MaybeTimeOfFlight::<T>::WithTimeOfFlight(value, tof_start) => {
 					// do not use `.elapsed()` of `std::time`, it may panic
@@ -237,9 +237,7 @@ impl<T> MeteredReceiver<T> {
 				MaybeTimeOfFlight::<T>::Bare(value) => value,
 			}
 			.into()
-		});
-
-		result
+		})
 	}
 
 	/// Get an updated accessor object for all metrics collected.
