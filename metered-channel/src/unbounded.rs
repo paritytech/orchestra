@@ -98,9 +98,6 @@ impl<T> UnboundedMeteredReceiver<T> {
 			.into()
 		});
 
-		#[cfg(feature = "async_channel")]
-		self.meter.note_channel_len(self.inner.len());
-
 		result
 	}
 
@@ -121,10 +118,13 @@ impl<T> UnboundedMeteredReceiver<T> {
 	/// Attempt to receive the next item.
 	#[cfg(feature = "async_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
-		match self.inner.try_recv() {
+		let result = match self.inner.try_recv() {
 			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
 			Err(err) => Err(err),
-		}
+		};
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	/// Returns the current number of messages in the channel
@@ -176,9 +176,6 @@ impl<T> UnboundedMeteredSender<T> {
 			MaybeTimeOfFlight::Bare(item)
 		};
 
-		#[cfg(feature = "async_channel")]
-		self.meter.note_channel_len(self.inner.len());
-
 		item
 	}
 
@@ -201,10 +198,13 @@ impl<T> UnboundedMeteredSender<T> {
 	#[cfg(feature = "async_channel")]
 	pub fn unbounded_send(&self, msg: T) -> result::Result<(), TrySendError<MaybeTimeOfFlight<T>>> {
 		let msg = self.prepare_with_tof(msg);
-		self.inner.try_send(msg).map_err(|e| {
+		let result = self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent();
 			e
-		})
+		});
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	/// Returns the current number of messages in the channel
