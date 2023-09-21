@@ -49,6 +49,9 @@ pub struct Meter {
 	sent: Arc<AtomicUsize>,
 	// Number of receives on this channel.
 	received: Arc<AtomicUsize>,
+	#[cfg(feature = "async_channel")]
+	// Number of elements in the channel.
+	channel_len: Arc<AtomicUsize>,
 	// Number of times senders blocked while sending messages to a subsystem.
 	blocked: Arc<AtomicUsize>,
 	// Atomic ringbuffer of the last 50 time of flight values
@@ -60,6 +63,8 @@ impl std::default::Default for Meter {
 		Self {
 			sent: Arc::new(AtomicUsize::new(0)),
 			received: Arc::new(AtomicUsize::new(0)),
+			#[cfg(feature = "async_channel")]
+			channel_len: Arc::new(AtomicUsize::new(0)),
 			blocked: Arc::new(AtomicUsize::new(0)),
 			tof: Arc::new(crossbeam_queue::ArrayQueue::new(100)),
 		}
@@ -75,6 +80,8 @@ pub struct Readout {
 	pub sent: usize,
 	/// The amount of messages received on the channel, in aggregate.
 	pub received: usize,
+	/// An approximation of the queue size.
+	pub channel_len: usize,
 	/// How many times the caller blocked when sending messages.
 	pub blocked: usize,
 	/// Time of flight in micro seconds (us)
@@ -86,9 +93,18 @@ impl Meter {
 	pub fn read(&self) -> Readout {
 		// when obtaining we don't care much about off by one
 		// accuracy
+		let sent = self.sent.load(Ordering::Relaxed);
+		let received = self.received.load(Ordering::Relaxed);
+
+		#[cfg(feature = "async_channel")]
+		let channel_len = self.channel_len.load(Ordering::Relaxed);
+		#[cfg(feature = "futures_channel")]
+		let channel_len = sent.saturating_sub(received);
+
 		Readout {
-			sent: self.sent.load(Ordering::Relaxed),
-			received: self.received.load(Ordering::Relaxed),
+			sent,
+			received,
+			channel_len,
 			blocked: self.blocked.load(Ordering::Relaxed),
 			tof: {
 				let mut acc = Vec::with_capacity(self.tof.len());
@@ -102,6 +118,11 @@ impl Meter {
 
 	fn note_sent(&self) -> usize {
 		self.sent.fetch_add(1, Ordering::Relaxed)
+	}
+
+	#[cfg(feature = "async_channel")]
+	fn note_channel_len(&self, len: usize) {
+		self.channel_len.store(len, Ordering::Relaxed)
 	}
 
 	fn retract_sent(&self) {

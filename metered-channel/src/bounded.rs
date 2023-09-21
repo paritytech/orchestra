@@ -224,6 +224,7 @@ impl<T> Stream for MeteredReceiver<T> {
 impl<T> MeteredReceiver<T> {
 	fn maybe_meter_tof(&mut self, maybe_value: Option<MaybeTimeOfFlight<T>>) -> Option<T> {
 		self.meter.note_received();
+
 		maybe_value.map(|value| {
 			match value {
 				MaybeTimeOfFlight::<T>::WithTimeOfFlight(value, tof_start) => {
@@ -256,30 +257,39 @@ impl<T> MeteredReceiver<T> {
 	/// Attempt to receive the next item.
 	#[cfg(feature = "async_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
-		match self.inner.try_recv() {
+		let result = match self.inner.try_recv() {
 			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
 			Err(err) => Err(err),
-		}
+		};
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	/// Receive the next item.
 	#[cfg(feature = "async_channel")]
 	pub async fn recv(&mut self) -> Result<T, RecvError> {
-		match self.inner.recv().await {
+		let result = match self.inner.recv().await {
 			Ok(value) =>
 				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
 			Err(err) => Err(err.into()),
-		}
+		};
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	/// Attempt to receive the next item without blocking
 	#[cfg(feature = "async_channel")]
 	pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
-		match self.inner.try_recv() {
+		let result = match self.inner.try_recv() {
 			Ok(value) =>
 				Ok(self.maybe_meter_tof(Some(value)).expect("wrapped value is always Some, qed")),
 			Err(err) => Err(err),
-		}
+		};
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	#[cfg(feature = "async_channel")]
@@ -330,6 +340,7 @@ impl<T> MeteredSender<T> {
 		} else {
 			MaybeTimeOfFlight::Bare(item)
 		};
+
 		item
 	}
 
@@ -366,10 +377,13 @@ impl<T> MeteredSender<T> {
 	) -> result::Result<(), SendError<T>> {
 		let fut = self.inner.send(msg);
 		futures::pin_mut!(fut);
-		fut.await.map_err(|err| {
+		let result = fut.await.map_err(|err| {
 			self.meter.retract_sent();
 			SendError::Closed(err.0.into())
-		})
+		});
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	#[cfg(feature = "futures_channel")]
@@ -401,10 +415,13 @@ impl<T> MeteredSender<T> {
 	/// Attempt to send message or fail immediately.
 	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
 		let msg = self.prepare_with_tof(msg); // note_sent is called in here
-		self.inner.try_send(msg).map_err(|e| {
+		let result = self.inner.try_send(msg).map_err(|e| {
 			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
 			TrySendError::from(e)
-		})
+		});
+
+		self.meter.note_channel_len(self.len());
+		result
 	}
 
 	#[cfg(feature = "async_channel")]
