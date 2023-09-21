@@ -42,6 +42,9 @@ use coarsetime::Instant as CoarseInstant;
 #[cfg(test)]
 mod tests;
 
+/// Defines the maximum number of time of flight values to be stored.
+const TOF_QUEUE_SIZE: usize = 100;
+
 /// A peek into the inner state of a meter.
 #[derive(Debug, Clone)]
 pub struct Meter {
@@ -54,7 +57,7 @@ pub struct Meter {
 	channel_len: Arc<AtomicUsize>,
 	// Number of times senders blocked while sending messages to a subsystem.
 	blocked: Arc<AtomicUsize>,
-	// Atomic ringbuffer of the last 50 time of flight values
+	// Atomic ringbuffer of the last `TOF_QUEUE_SIZE` time of flight values
 	tof: Arc<crossbeam_queue::ArrayQueue<CoarseDuration>>,
 }
 
@@ -66,7 +69,7 @@ impl std::default::Default for Meter {
 			#[cfg(feature = "async_channel")]
 			channel_len: Arc::new(AtomicUsize::new(0)),
 			blocked: Arc::new(AtomicUsize::new(0)),
-			tof: Arc::new(crossbeam_queue::ArrayQueue::new(100)),
+			tof: Arc::new(crossbeam_queue::ArrayQueue::new(TOF_QUEUE_SIZE)),
 		}
 	}
 }
@@ -139,6 +142,13 @@ impl Meter {
 
 	fn note_time_of_flight(&self, tof: CoarseDuration) {
 		let _ = self.tof.force_push(tof);
+	}
+
+	#[cfg(feature = "futures_channel")]
+	fn calculate_channel_len(&self) -> usize {
+		let sent = self.sent.load(Ordering::Relaxed);
+		let received = self.received.load(Ordering::Relaxed);
+		sent.saturating_sub(received) as usize
 	}
 }
 
