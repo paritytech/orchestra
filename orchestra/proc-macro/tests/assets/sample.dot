@@ -1,0 +1,14 @@
+digraph {
+				fontname="Cantarell"
+				bgcolor="white"
+				label = "orchestra message flow between subsystems"
+node [colorscheme=rdylgn10]
+    0 [ label="AvailabilityStore"]
+    1 [ label="Provisioner"]
+    2 [ label="RuntimeApi"]
+    3 [ label="ChainApi"]
+    4 [ label="MlExecution"]
+    6 [ label="NetworkBridgeTx"]
+    7 [ color="/rdylgn10/1",fontcolor="/rdylgn10/1",xlabel=<<B><FONT COLOR="/rdylgn10/1">α</FONT></B>>,label="GossipSupport"]
+    1 -> 0 [ label="AvailabilityStoreMessage"]
+}
