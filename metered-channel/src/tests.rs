@@ -23,6 +23,14 @@ struct Msg {
 	val: u8,
 }
 
+fn msg1() -> Msg {
+	Msg { val: 1 }
+}
+
+fn msg2() -> Msg {
+	Msg { val: 2 }
+}
+
 #[test]
 fn try_send_try_next() {
 	block_on(async move {
@@ -170,9 +178,10 @@ fn blocked_send_is_metered() {
 		let mut sender1 = bounded_sender.clone();
 		futures::join!(
 			async move {
-				assert!(sender1.send(Msg::default()).await.is_ok());
-				assert!(sender1.send(Msg::default()).await.is_ok());
-				assert!(sender1.send(Msg::default()).await.is_ok());
+				assert!(sender1.send(msg1()).await.is_ok());
+				assert!(sender1.send(msg1()).await.is_ok());
+				// We should be able to do that even if a channel is not configured as priority
+				assert!(sender1.send_priority(msg2()).await.is_ok());
 			},
 			async move {
 				bounded_receiver.next().await.unwrap();
@@ -192,5 +201,35 @@ fn blocked_send_is_metered() {
 				);
 			}
 		);
+	});
+}
+
+#[test]
+fn send_try_next_priority() {
+	block_on(async move {
+		let (mut tx, mut rx) = channel_priority::<Msg>(4, 1);
+		let msg = msg1();
+		let msg_pri = msg2();
+		assert_matches!(rx.meter().read(), Readout { sent: 0, received: 0, .. });
+		tx.try_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 1, received: 0, .. });
+		tx.try_send(msg).unwrap();
+		tx.try_send(msg).unwrap();
+		tx.try_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 0, .. });
+		assert!(tx.try_send(msg).is_err()); // Reached capacity
+		tx.try_send_priority(msg_pri).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 5, received: 0, .. });
+		let res = rx.try_next().unwrap().unwrap();
+		assert_matches!(rx.meter().read(), Readout { sent: 5, received: 1, .. });
+		assert_eq!(res.val, 2); // Priority comes first
+
+		let res = rx.try_next().unwrap().unwrap();
+		assert_eq!(res.val, 1); // Bulk comes second
+		rx.try_next().unwrap();
+		rx.try_next().unwrap();
+		rx.try_next().unwrap();
+
+		assert!(rx.try_next().is_err());
 	});
 }
