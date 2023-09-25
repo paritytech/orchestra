@@ -242,6 +242,11 @@ impl<T> MeteredReceiver<T> {
 
 	/// Get an updated accessor object for all metrics collected.
 	pub fn meter(&self) -> &Meter {
+		// For async_channel we can update channel length in the meter access
+		// to avoid more expensive updates on each RW operation
+		#[cfg(feature = "async_channel")]
+		self.meter.note_channel_len(self.len());
+
 		&self.meter
 	}
 
@@ -262,7 +267,6 @@ impl<T> MeteredReceiver<T> {
 			Err(err) => Err(err),
 		};
 
-		self.meter.note_channel_len(self.len());
 		result
 	}
 
@@ -275,7 +279,6 @@ impl<T> MeteredReceiver<T> {
 			Err(err) => Err(err.into()),
 		};
 
-		self.meter.note_channel_len(self.len());
 		result
 	}
 
@@ -288,7 +291,6 @@ impl<T> MeteredReceiver<T> {
 			Err(err) => Err(err),
 		};
 
-		self.meter.note_channel_len(self.len());
 		result
 	}
 
@@ -296,6 +298,12 @@ impl<T> MeteredReceiver<T> {
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
+	}
+
+	#[cfg(feature = "futures_channel")]
+	/// Returns the current number of messages in the channel based on meter approximation
+	pub fn len(&self) -> usize {
+		self.meter.calculate_channel_len()
 	}
 }
 
@@ -346,6 +354,10 @@ impl<T> MeteredSender<T> {
 
 	/// Get an updated accessor object for all metrics collected.
 	pub fn meter(&self) -> &Meter {
+		// For async_channel we can update channel length in the meter access
+		// to avoid more expensive updates on each RW operation
+		#[cfg(feature = "async_channel")]
+		self.meter.note_channel_len(self.len());
 		&self.meter
 	}
 
@@ -382,7 +394,6 @@ impl<T> MeteredSender<T> {
 			SendError::Closed(err.0.into())
 		});
 
-		self.meter.note_channel_len(self.len());
 		result
 	}
 
@@ -420,7 +431,6 @@ impl<T> MeteredSender<T> {
 			TrySendError::from(e)
 		});
 
-		self.meter.note_channel_len(self.len());
 		result
 	}
 
@@ -428,5 +438,11 @@ impl<T> MeteredSender<T> {
 	/// Returns the current number of messages in the channel
 	pub fn len(&self) -> usize {
 		self.inner.len()
+	}
+
+	#[cfg(feature = "futures_channel")]
+	/// Returns the current number of messages in the channel based on meter approximation
+	pub fn len(&self) -> usize {
+		self.meter.calculate_channel_len()
 	}
 }
