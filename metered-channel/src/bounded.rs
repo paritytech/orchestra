@@ -414,12 +414,33 @@ impl<T> MeteredSender<T> {
 		&self.meter
 	}
 
-	/// Send message, wait until capacity is available.
+	/// Send message in bulk channel, wait until capacity is available.
 	pub async fn send(&mut self, msg: T) -> result::Result<(), SendError<T>>
 	where
 		Self: Unpin,
 	{
-		match self.try_send(msg) {
+		self.send_maybe_priority(msg, false).await
+	}
+
+	/// Send message in priority channel (if configured), wait until capacity is available.
+	pub async fn send_priority(&mut self, msg: T) -> result::Result<(), SendError<T>>
+	where
+		Self: Unpin,
+	{
+		self.send_maybe_priority(msg, true).await
+	}
+
+	async fn send_maybe_priority(
+		&mut self,
+		msg: T,
+		is_priority: bool,
+	) -> result::Result<(), SendError<T>>
+	where
+		Self: Unpin,
+	{
+		let res = if is_priority { self.try_send_priority(msg) } else { self.try_send(msg) };
+
+		match res {
 			Err(send_err) => {
 				if !send_err.is_full() {
 					return Err(SendError::Closed(send_err.into_inner().into()))
@@ -428,7 +449,7 @@ impl<T> MeteredSender<T> {
 				self.meter.note_blocked();
 				self.meter.note_sent(); // we are going to do full blocking send, so we have to note it here
 				let msg = send_err.into_inner().into();
-				self.send_to_channel(msg).await
+				self.send_to_channel(msg, is_priority).await
 			},
 			_ => Ok(()),
 		}
@@ -439,8 +460,15 @@ impl<T> MeteredSender<T> {
 	async fn send_to_channel(
 		&mut self,
 		msg: MaybeTimeOfFlight<T>,
+		is_priority: bool,
 	) -> result::Result<(), SendError<T>> {
-		let fut = self.bulk_channel.send(msg);
+		let channel = if is_priority {
+			self.priority_channel.as_mut().unwrap_or(&mut self.bulk_channel)
+		} else {
+			&mut self.bulk_channel
+		};
+
+		let fut = channel.send(msg);
 		futures::pin_mut!(fut);
 		let result = fut.await.map_err(|err| {
 			self.meter.retract_sent();
@@ -454,8 +482,14 @@ impl<T> MeteredSender<T> {
 	async fn send_to_channel(
 		&mut self,
 		msg: MaybeTimeOfFlight<T>,
+		is_priority: bool,
 	) -> result::Result<(), SendError<T>> {
-		let fut = self.bulk_channel.send(msg);
+		let channel = if is_priority {
+			self.priority_channel.as_mut().unwrap_or(&mut self.bulk_channel)
+		} else {
+			&mut self.bulk_channel
+		};
+		let fut = channel.send(msg);
 		futures::pin_mut!(fut);
 		fut.await.map_err(|_| {
 			self.meter.retract_sent();
@@ -465,7 +499,6 @@ impl<T> MeteredSender<T> {
 		})
 	}
 
-	#[cfg(feature = "futures_channel")]
 	/// Attempt to send message or fail immediately.
 	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
 		let msg = prepare_with_tof(&self.meter, msg); // note_sent is called in here
@@ -475,14 +508,18 @@ impl<T> MeteredSender<T> {
 		})
 	}
 
-	#[cfg(feature = "async_channel")]
 	/// Attempt to send message or fail immediately.
-	pub fn try_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
-		let msg = prepare_with_tof(&self.meter, msg); // note_sent is called in here
-		self.bulk_channel.try_send(msg).map_err(|e| {
-			self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
-			TrySendError::from(e)
-		})
+	pub fn try_send_priority(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
+		match self.priority_channel.as_mut() {
+			Some(priority_channel) => {
+				let msg = prepare_with_tof(&self.meter, msg);
+				priority_channel.try_send(msg).map_err(|e| {
+					self.meter.retract_sent(); // we didn't send it, so we need to undo the note_send
+					TrySendError::from(e)
+				})
+			},
+			None => self.try_send(msg), // use bulk channel as fallback
+		}
 	}
 
 	#[cfg(feature = "async_channel")]
