@@ -161,9 +161,12 @@ fn measure_tof_check(nth: usize) -> bool {
 	} else {
 		use nanorand::Rng;
 		let mut rng = nanorand::WyRand::new_seed(nth as u64);
-		let pick = rng.generate_range(1_usize..=1000);
-		// measure 5.3%
-		pick <= 53
+
+		// measure 5.3% (we ignore the fact that 2^64 cannot be represented as f64)
+		const PROB: u64 = (u64::MAX as f64 * 0.053_f64) as u64;
+		let coin = rng.generate::<u64>();
+
+		coin >= PROB
 	}
 }
 
@@ -191,6 +194,16 @@ impl<T> MaybeTimeOfFlight<T> {
 			Self::WithTimeOfFlight(value, _tof_start) => value,
 		}
 	}
+}
+
+pub fn prepare_with_tof<T>(meter: &Meter, item: T) -> MaybeTimeOfFlight<T> {
+	let previous = meter.note_sent();
+	let item = if measure_tof_check(previous) {
+		MaybeTimeOfFlight::WithTimeOfFlight(item, CoarseInstant::now())
+	} else {
+		MaybeTimeOfFlight::Bare(item)
+	};
+	item
 }
 
 impl<T> std::ops::Deref for MaybeTimeOfFlight<T> {
