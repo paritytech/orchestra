@@ -207,7 +207,11 @@ fn blocked_send_is_metered() {
 #[test]
 fn send_try_next_priority() {
 	block_on(async move {
+		#[cfg(feature = "async_channel")]
 		let (mut tx, mut rx) = channel_priority::<Msg>(4, 1);
+		#[cfg(feature = "futures_channel")]
+		let (mut tx, mut rx) = channel_priority::<Msg>(3, 1);
+
 		let msg = msg1();
 		let msg_pri = msg2();
 		assert_matches!(rx.meter().read(), Readout { sent: 0, received: 0, .. });
