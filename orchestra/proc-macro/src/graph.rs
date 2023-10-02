@@ -184,7 +184,6 @@ impl<'a> ConnectionGraph<'a> {
 		dest: impl AsRef<std::path::Path>,
 	) -> anyhow::Result<()> {
 		use self::graph_helpers::color_scheme;
-		use fs_err as fs;
 
 		let dot_content = format!(
 			r#"digraph {{
@@ -201,32 +200,10 @@ node [colorscheme={}]
 		let dest = dest.as_ref();
 		let dest = dest.to_path_buf();
 
-		let svg_content = {
-			let mut parser = dotlay::gv::DotParser::new(dot_content.as_str());
-			let graph = parser.process().map_err(|err_msg| {
-				anyhow::anyhow!(dbg!(err_msg)).context("Failed to parse dotfile")
-			})?;
-			let mut svg = dotlay::backends::svg::SVGWriter::new();
-			let mut builder = dotlay::gv::GraphBuilder::default();
-			builder.visit_graph(&graph);
-			let mut vg = builder.get();
-			vg.do_it(false, false, false, &mut svg);
-			svg.finalize()
-		};
-
-		fn write_to_disk(
-			dest: impl AsRef<std::path::Path>,
-			ext: &str,
-			content: impl AsRef<[u8]>,
-		) -> std::io::Result<()> {
-			let dest = dest.as_ref().with_extension(ext);
-			print!("Writing {} to {} ..", ext, dest.display());
-			fs::write(dest, content.as_ref())?;
-			println!(" OK");
-			Ok(())
-		}
-
 		write_to_disk(&dest, "dot", &dot_content)?;
+
+		let svg_content = convert_dot_to_svg(&dot_content)?;
+
 		write_to_disk(&dest, "svg", &svg_content)?;
 
 		Ok(())
@@ -388,6 +365,35 @@ node [colorscheme={}]
 	}
 }
 
+#[cfg(feature = "dotgraph")]
+fn convert_dot_to_svg(dot_content: impl AsRef<str>) -> anyhow::Result<String> {
+	let mut parser = dotlay::gv::DotParser::new(dot_content.as_ref());
+	let graph = parser.process().map_err(|err_msg| {
+		parser.print_error();
+		anyhow::anyhow!(err_msg).context("Failed to parse dotfile content")
+	})?;
+	let mut svg = dotlay::backends::svg::SVGWriter::new();
+	let mut builder = dotlay::gv::GraphBuilder::default();
+	builder.visit_graph(&graph);
+	let mut vg = builder.get();
+	vg.do_it(true, false, false, &mut svg);
+	Ok(svg.finalize())
+}
+
+#[cfg(feature = "dotgraph")]
+fn write_to_disk(
+	dest: impl AsRef<std::path::Path>,
+	ext: &str,
+	content: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
+	use fs_err as fs;
+	let dest = dest.as_ref().with_extension(ext);
+	print!("Writing {} to {} ..", ext, dest.display());
+	fs::write(dest, content.as_ref())?;
+	println!(" OK");
+	Ok(())
+}
+
 const GREEK_ALPHABET_SIZE: usize = 24;
 
 fn greek_alphabet() -> [char; GREEK_ALPHABET_SIZE] {
@@ -489,5 +495,15 @@ mod tests {
 		});
 		assert_eq!(sccs.len(), 2); // `f` and everything else
 		assert_eq!(sccs[0].len(), 5); // every node but `f`
+	}
+
+	#[cfg(feature = "dotgraph")]
+	#[ignore]
+	#[test]
+	fn dot_to_svg_works() {
+		use super::convert_dot_to_svg;
+
+		let s = include_str!("../tests/assets/sample.dot");
+		convert_dot_to_svg(s).unwrap();
 	}
 }
