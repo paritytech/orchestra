@@ -363,12 +363,6 @@ impl<T> MeteredReceiver<T> {
 	pub fn len(&self) -> usize {
 		self.meter.calculate_channel_len()
 	}
-
-	#[cfg(feature = "futures_channel")]
-	/// Returns the current number of messages in the channel based on meter approximation
-	pub fn len(&self) -> usize {
-		self.meter.calculate_channel_len()
-	}
 }
 
 impl<T> futures::stream::FusedStream for MeteredReceiver<T> {
