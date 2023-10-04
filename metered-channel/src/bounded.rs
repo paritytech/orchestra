@@ -281,9 +281,10 @@ impl<T> MeteredReceiver<T> {
 	#[cfg(feature = "futures_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		if let Some(priority_channel) = &mut self.priority_channel {
-			match priority_channel.try_next()? {
-				Some(value) => return Ok(self.maybe_meter_tof(Some(value))),
-				None => {},
+			match priority_channel.try_next() {
+				Ok(Some(value)) => return Ok(self.maybe_meter_tof(Some(value))),
+				Ok(None) => return Ok(None), // Channel is closed, inform the caller
+				Err(_) => {},                // Channel is not closed but empty, ignore the error
 			}
 		}
 		match self.bulk_channel.try_next()? {
@@ -298,13 +299,14 @@ impl<T> MeteredReceiver<T> {
 		if let Some(priority_channel) = &mut self.priority_channel {
 			match priority_channel.try_recv() {
 				Ok(value) => return Ok(self.maybe_meter_tof(Some(value))),
-				Err(TryRecvError::Empty) => {},
-				Err(err) => return Err(err),
+				Err(TryRecvError::Empty) => {},               // Continue to bulk
+				Err(TryRecvError::Closed) => return Ok(None), // Mimic futures_channel behaviour
 			}
 		}
 		match self.bulk_channel.try_recv() {
 			Ok(value) => Ok(self.maybe_meter_tof(Some(value))),
-			Err(err) => Err(err),
+			Err(TryRecvError::Empty) => Err(TryRecvError::Empty),
+			Err(TryRecvError::Closed) => Ok(None), // Mimic futures_channel behaviour
 		}
 	}
 
