@@ -46,7 +46,7 @@ pub fn channel<T>(capacity: usize) -> (MeteredSender<T>, MeteredReceiver<T>) {
 }
 
 /// Create a pair of `MeteredSender` and `MeteredReceiver`. Priority channel is provided
-pub fn channel_priority<T>(
+pub fn channel_with_priority<T>(
 	capacity_bulk: usize,
 	capacity_priority: usize,
 ) -> (MeteredSender<T>, MeteredReceiver<T>) {
