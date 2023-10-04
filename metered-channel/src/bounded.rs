@@ -278,6 +278,11 @@ impl<T> MeteredReceiver<T> {
 	}
 
 	/// Attempt to receive the next item.
+	/// This function returns:
+	///
+	///    Ok(Some(t)) when message is fetched
+	///    Ok(None) when channel is closed and no messages left in the queue
+	///    Err(e) when there are no messages available, but channel is not yet closed
 	#[cfg(feature = "futures_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		if let Some(priority_channel) = &mut self.priority_channel {
@@ -294,6 +299,11 @@ impl<T> MeteredReceiver<T> {
 	}
 
 	/// Attempt to receive the next item.
+	/// This function returns:
+	///
+	///    Ok(Some(t)) when message is fetched
+	///    Ok(None) when channel is closed and no messages left in the queue
+	///    Err(e) when there are no messages available, but channel is not yet closed
 	#[cfg(feature = "async_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		if let Some(priority_channel) = &mut self.priority_channel {
