@@ -243,3 +243,55 @@ fn send_try_next_priority() {
 		assert!(rx.try_next().is_err());
 	});
 }
+
+#[test]
+fn consistent_try_next() {
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(1));
+
+	block_on(async move {
+		// Keep channel opened by having an additional sending handle
+		let tx1 = tx.clone();
+		futures::join!(
+			async move {
+				tx.try_send(msg1()).unwrap();
+				tx.try_send(msg2()).unwrap();
+				assert!(tx.try_send(msg1()).is_err());
+			},
+			async move {
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 1);
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 2);
+				// Channel must be empty, so Err is returned
+				assert!(rx.try_next().is_err());
+			},
+		);
+
+		drop(tx1);
+	});
+
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(1));
+
+	block_on(async move {
+		futures::join!(
+			async move {
+				tx.try_send(msg1()).unwrap();
+				tx.try_send(msg2()).unwrap();
+				assert!(tx.try_send(msg1()).is_err());
+				drop(tx); // Close sender handle
+			},
+			async move {
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 1);
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 2);
+				// Channel must be empty and closed, so Ok(None) must be returned
+				assert!(rx.try_next().unwrap().is_none());
+			},
+		);
+	});
+}
