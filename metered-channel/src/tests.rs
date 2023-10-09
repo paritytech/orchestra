@@ -23,10 +23,30 @@ struct Msg {
 	val: u8,
 }
 
+fn msg1() -> Msg {
+	Msg { val: 1 }
+}
+
+fn msg2() -> Msg {
+	Msg { val: 2 }
+}
+
+#[cfg(feature = "async_channel")]
+// A helper to adjust capacity for different channel implementations.
+fn adjust_capacity(cap: usize) -> usize {
+	cap + 1
+}
+
+#[cfg(feature = "futures_channel")]
+// A helper to adjust capacity for different channel implementations.
+fn adjust_capacity(cap: usize) -> usize {
+	cap
+}
+
 #[test]
 fn try_send_try_next() {
 	block_on(async move {
-		let (mut tx, mut rx) = channel::<Msg>(5);
+		let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(4));
 		let msg = Msg::default();
 		assert_matches!(rx.meter().read(), Readout { sent: 0, received: 0, .. });
 		tx.try_send(msg).unwrap();
@@ -85,7 +105,7 @@ fn try_send_try_next_unbounded() {
 fn with_tasks() {
 	let (ready, go) = futures::channel::oneshot::channel();
 
-	let (mut tx, mut rx) = channel::<Msg>(5);
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(4));
 	block_on(async move {
 		futures::join!(
 			async move {
@@ -118,7 +138,7 @@ use std::time::Duration;
 
 #[test]
 fn stream_and_sink() {
-	let (mut tx, mut rx) = channel::<Msg>(5);
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(4));
 
 	block_on(async move {
 		futures::join!(
@@ -144,7 +164,7 @@ fn stream_and_sink() {
 
 #[test]
 fn failed_send_does_not_inc_sent() {
-	let (mut bounded, _) = channel::<Msg>(5);
+	let (mut bounded, _) = channel::<Msg>(adjust_capacity(4));
 	let (unbounded, _) = unbounded::<Msg>();
 
 	block_on(async move {
@@ -159,20 +179,18 @@ fn failed_send_does_not_inc_sent() {
 
 #[test]
 fn blocked_send_is_metered() {
-	// Async channel and futures channel have different semantics for
-	// capacity (futures channel capacity is actually `capacity + 1`)
-	#[cfg(feature = "async_channel")]
-	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(2);
-	#[cfg(feature = "futures_channel")]
-	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(1);
+	let (bounded_sender, mut bounded_receiver) = channel::<Msg>(adjust_capacity(1));
 
 	block_on(async move {
-		let mut sender1 = bounded_sender.clone();
+		// Avoid clone to prevent futures channels capacity increase
+		let locked_sender = Arc::new(std::sync::Mutex::new(bounded_sender));
+		let locked_sender1 = locked_sender.clone();
 		futures::join!(
 			async move {
-				assert!(sender1.send(Msg::default()).await.is_ok());
-				assert!(sender1.send(Msg::default()).await.is_ok());
-				assert!(sender1.send(Msg::default()).await.is_ok());
+				assert!(locked_sender.lock().unwrap().send(msg1()).await.is_ok());
+				assert!(locked_sender.lock().unwrap().send(msg1()).await.is_ok());
+				// We should be able to do that even if a channel is not configured as priority
+				assert!(locked_sender.lock().unwrap().priority_send(msg2()).await.is_ok());
 			},
 			async move {
 				bounded_receiver.next().await.unwrap();
@@ -187,10 +205,93 @@ fn blocked_send_is_metered() {
 					Readout { sent: 3, received: 3, blocked: 1, .. }
 				);
 				assert_matches!(
-					bounded_sender.meter().read(),
+					locked_sender1.lock().unwrap().meter().read(),
 					Readout { sent: 3, received: 3, blocked: 1, .. }
 				);
 			}
+		);
+	});
+}
+
+#[test]
+fn send_try_next_priority() {
+	block_on(async move {
+		let (mut tx, mut rx) = channel_with_priority::<Msg>(adjust_capacity(3), adjust_capacity(1));
+
+		let msg = msg1();
+		let msg_pri = msg2();
+		assert_matches!(rx.meter().read(), Readout { sent: 0, received: 0, .. });
+		tx.try_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 1, received: 0, .. });
+		tx.try_send(msg).unwrap();
+		tx.try_send(msg).unwrap();
+		tx.try_send(msg).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 0, .. });
+		assert!(tx.try_send(msg).is_err()); // Reached capacity
+		tx.try_priority_send(msg_pri).unwrap();
+		assert_matches!(tx.meter().read(), Readout { sent: 5, received: 0, .. });
+		let res = rx.try_next().unwrap().unwrap();
+		assert_matches!(rx.meter().read(), Readout { sent: 5, received: 1, .. });
+		assert_eq!(res.val, 2); // Priority comes first
+
+		let res = rx.try_next().unwrap().unwrap();
+		assert_eq!(res.val, 1); // Bulk comes second
+		rx.try_next().unwrap();
+		rx.try_next().unwrap();
+		rx.try_next().unwrap();
+
+		assert!(rx.try_next().is_err());
+	});
+}
+
+#[test]
+fn consistent_try_next() {
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(1));
+
+	block_on(async move {
+		// Keep channel opened by having an additional sending handle
+		let tx1 = tx.clone();
+		futures::join!(
+			async move {
+				tx.try_send(msg1()).unwrap();
+				tx.try_send(msg2()).unwrap();
+				assert!(tx.try_send(msg1()).is_err());
+			},
+			async move {
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 1);
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 2);
+				// Channel must be empty, so Err is returned
+				assert!(rx.try_next().is_err());
+			},
+		);
+
+		drop(tx1);
+	});
+
+	let (mut tx, mut rx) = channel::<Msg>(adjust_capacity(1));
+
+	block_on(async move {
+		futures::join!(
+			async move {
+				tx.try_send(msg1()).unwrap();
+				tx.try_send(msg2()).unwrap();
+				assert!(tx.try_send(msg1()).is_err());
+				drop(tx); // Close sender handle
+			},
+			async move {
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 1);
+				let msg = rx.try_next().unwrap();
+				let res = msg.unwrap();
+				assert_eq!(res.val, 2);
+				// Channel must be empty and closed, so Ok(None) must be returned
+				assert!(rx.try_next().unwrap().is_none());
+			},
 		);
 	});
 }

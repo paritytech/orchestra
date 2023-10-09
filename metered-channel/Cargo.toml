@@ -1,9 +1,9 @@
 [package]
 name = "prioritized-metered-channel"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
-description = "Channels with built-in observability and message priorizitazion (coming soon™)"
+description = "Channels with built-in observability and optional message priorizitazion"
 repository = "https://github.com/paritytech/orchestra.git"
 license = "MIT OR Apache-2.0"
 
