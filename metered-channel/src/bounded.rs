@@ -184,7 +184,7 @@ impl<T> TrySendError<T> {
 		}
 	}
 
-	/// Transform the inner value, failable version.
+	/// Transform the inner value, fail-able version.
 	pub fn try_transform_inner<U, F, E>(self, f: F) -> std::result::Result<TrySendError<U>, E>
 	where
 		F: FnOnce(T) -> std::result::Result<U, E>,
@@ -281,8 +281,8 @@ impl<T> MeteredReceiver<T> {
 	/// This function returns:
 	///
 	///    `Ok(Some(t))` when message is fetched
-	///    Ok(None) when channel is closed and no messages left in the queue
-	///    Err(e) when there are no messages available, but channel is not yet closed
+	///    `Ok(None)` when channel is closed and no messages left in the queue
+	///    `Err(e)` when there are no messages available, but channel is not yet closed
 	#[cfg(feature = "futures_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		if let Some(priority_channel) = &mut self.priority_channel {
@@ -301,9 +301,9 @@ impl<T> MeteredReceiver<T> {
 	/// Attempt to receive the next item.
 	/// This function returns:
 	///
-	///    Ok(Some(t)) when message is fetched
-	///    Ok(None) when channel is closed and no messages left in the queue
-	///    Err(e) when there are no messages available, but channel is not yet closed
+	///    `Ok(Some(t))` when message is fetched
+	///    `Ok(None)` when channel is closed and no messages left in the queue
+	///    `Err(e)` when there are no messages available, but channel is not yet closed
 	#[cfg(feature = "async_channel")]
 	pub fn try_next(&mut self) -> Result<Option<T>, TryRecvError> {
 		if let Some(priority_channel) = &mut self.priority_channel {
@@ -431,26 +431,27 @@ impl<T> MeteredSender<T> {
 	where
 		Self: Unpin,
 	{
-		self.send_maybe_priority(msg, false).await
+		self.send_inner(msg, false).await
 	}
 
 	/// Send message in priority channel (if configured), wait until capacity is available.
-	pub async fn send_priority(&mut self, msg: T) -> result::Result<(), SendError<T>>
+	pub async fn priority_send(&mut self, msg: T) -> result::Result<(), SendError<T>>
 	where
 		Self: Unpin,
 	{
-		self.send_maybe_priority(msg, true).await
+		self.send_inner(msg, true).await
 	}
 
-	async fn send_maybe_priority(
+	async fn send_inner(
 		&mut self,
 		msg: T,
-		is_priority: bool,
+		use_priority_channel: bool,
 	) -> result::Result<(), SendError<T>>
 	where
 		Self: Unpin,
 	{
-		let res = if is_priority { self.try_send_priority(msg) } else { self.try_send(msg) };
+		let res =
+			if use_priority_channel { self.try_priority_send(msg) } else { self.try_send(msg) };
 
 		match res {
 			Err(send_err) => {
@@ -461,7 +462,7 @@ impl<T> MeteredSender<T> {
 				self.meter.note_blocked();
 				self.meter.note_sent(); // we are going to do full blocking send, so we have to note it here
 				let msg = send_err.into_inner().into();
-				self.send_to_channel(msg, is_priority).await
+				self.send_to_channel(msg, use_priority_channel).await
 			},
 			_ => Ok(()),
 		}
@@ -472,9 +473,9 @@ impl<T> MeteredSender<T> {
 	async fn send_to_channel(
 		&mut self,
 		msg: MaybeTimeOfFlight<T>,
-		is_priority: bool,
+		use_priority_channel: bool,
 	) -> result::Result<(), SendError<T>> {
-		let channel = if is_priority {
+		let channel = if use_priority_channel {
 			self.priority_channel.as_mut().unwrap_or(&mut self.bulk_channel)
 		} else {
 			&mut self.bulk_channel
@@ -494,9 +495,9 @@ impl<T> MeteredSender<T> {
 	async fn send_to_channel(
 		&mut self,
 		msg: MaybeTimeOfFlight<T>,
-		is_priority: bool,
+		use_priority_channel: bool,
 	) -> result::Result<(), SendError<T>> {
-		let channel = if is_priority {
+		let channel = if use_priority_channel {
 			self.priority_channel.as_mut().unwrap_or(&mut self.bulk_channel)
 		} else {
 			&mut self.bulk_channel
@@ -521,7 +522,7 @@ impl<T> MeteredSender<T> {
 	}
 
 	/// Attempt to send message or fail immediately.
-	pub fn try_send_priority(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
+	pub fn try_priority_send(&mut self, msg: T) -> result::Result<(), TrySendError<T>> {
 		match self.priority_channel.as_mut() {
 			Some(priority_channel) => {
 				let msg = prepare_with_tof(&self.meter, msg);

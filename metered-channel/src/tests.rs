@@ -190,7 +190,7 @@ fn blocked_send_is_metered() {
 				assert!(locked_sender.lock().unwrap().send(msg1()).await.is_ok());
 				assert!(locked_sender.lock().unwrap().send(msg1()).await.is_ok());
 				// We should be able to do that even if a channel is not configured as priority
-				assert!(locked_sender.lock().unwrap().send_priority(msg2()).await.is_ok());
+				assert!(locked_sender.lock().unwrap().priority_send(msg2()).await.is_ok());
 			},
 			async move {
 				bounded_receiver.next().await.unwrap();
@@ -228,7 +228,7 @@ fn send_try_next_priority() {
 		tx.try_send(msg).unwrap();
 		assert_matches!(tx.meter().read(), Readout { sent: 4, received: 0, .. });
 		assert!(tx.try_send(msg).is_err()); // Reached capacity
-		tx.try_send_priority(msg_pri).unwrap();
+		tx.try_priority_send(msg_pri).unwrap();
 		assert_matches!(tx.meter().read(), Readout { sent: 5, received: 0, .. });
 		let res = rx.try_next().unwrap().unwrap();
 		assert_matches!(rx.meter().read(), Readout { sent: 5, received: 1, .. });
