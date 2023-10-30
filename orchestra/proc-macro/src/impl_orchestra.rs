@@ -211,7 +211,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 			///
 			/// If the inner `instance` is `None`, nothing is happening.
 			pub async fn send_message2(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
-				const MESSAGE_TIMEOUT: Duration = Duration::from_secs(10);
+				const MESSAGE_TIMEOUT: Duration = Duration::from_secs(60);
 
 				if let Some(ref mut instance) = self.instance {
 					match instance.tx_bounded.send(MessagePacket {
@@ -241,7 +241,7 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 			///
 			/// If the inner `instance` is `None`, nothing is happening.
 			pub async fn send_signal(&mut self, signal: #signal) -> ::std::result::Result<(), #error_ty > {
-				const SIGNAL_TIMEOUT: ::std::time::Duration = ::std::time::Duration::from_secs(10);
+				const SIGNAL_TIMEOUT: ::std::time::Duration = ::std::time::Duration::from_secs(60);
 
 				if let Some(ref mut instance) = self.instance {
 					match instance.tx_signal.send(signal).timeout(SIGNAL_TIMEOUT).await {
