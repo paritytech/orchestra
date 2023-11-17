@@ -75,7 +75,7 @@ pub use futures::{
 	future::{BoxFuture, Fuse, Future},
 	poll, select,
 	stream::{self, select, select_with_strategy, FuturesUnordered, PollNext},
-	task::{Context, Poll},
+	task::{AtomicWaker, Context, Poll},
 	FutureExt, StreamExt,
 };
 #[doc(hidden)]
@@ -217,9 +217,15 @@ pub type SubsystemIncomingMessages<M> = self::stream::SelectWithStrategy<
 	(),
 >;
 
+#[derive(Debug, Default)]
+struct SignalsReceivedInner {
+	waker: AtomicWaker,
+	value: AtomicUsize,
+}
+
 /// Watermark to track the received signals.
 #[derive(Debug, Default, Clone)]
-pub struct SignalsReceived(Arc<AtomicUsize>);
+pub struct SignalsReceived(Arc<SignalsReceivedInner>);
 
 impl SignalsReceived {
 	/// Load the current value of received signals.
@@ -227,12 +233,30 @@ impl SignalsReceived {
 		// It's imperative that we prevent reading a stale value from memory because of reordering.
 		// Memory barrier to ensure that no reads or writes in the current thread before this load are reordered.
 		// All writes in other threads using release semantics become visible to the current thread.
-		self.0.load(atomic::Ordering::Acquire)
+		self.0.value.load(atomic::Ordering::Acquire)
 	}
 
 	/// Increase the number of signals by one.
 	pub fn inc(&self) {
-		let _previous = self.0.fetch_add(1, atomic::Ordering::AcqRel);
+		let _previous = self.0.value.fetch_add(1, atomic::Ordering::AcqRel);
+		self.0.waker.wake();
+	}
+}
+
+impl Future for SignalsReceived {
+	type Output = ();
+
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+		if self.0.waker.take().is_some() {
+			// The waker has already been registered, so we're polled due to `wake()`, that is, the value
+			// has changed.
+			Poll::Ready(())
+		} else {
+			// No waker, so it's the initial poll on `await`. Register the waker and wait for the value to
+			// change.
+			self.0.waker.register(cx.waker());
+			Poll::Pending
+		}
 	}
 }
 
@@ -416,8 +440,14 @@ pub trait SubsystemContext: Send + 'static {
 	/// using `pending!()` macro you will end up with a busy loop!
 	async fn try_recv(&mut self) -> Result<Option<FromOrchestra<Self::Message, Self::Signal>>, ()>;
 
-	/// Receive a message.
+	/// Receive a signal or a message.
 	async fn recv(&mut self) -> Result<FromOrchestra<Self::Message, Self::Signal>, Self::Error>;
+
+	/// Receive a signal.
+	async fn recv_signal(&mut self) -> Result<Self::Signal, Self::Error>;
+
+	/// Receive a message.
+	async fn recv_msg(&mut self) -> Result<Self::Message, Self::Error>;
 
 	/// Spawn a child task on the executor.
 	fn spawn(
