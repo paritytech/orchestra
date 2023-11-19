@@ -231,7 +231,7 @@ pub struct SignalsReceivedWaiter<'a, F: Fn(usize) -> bool> {
 
 impl<F: Fn(usize) -> bool> Future for SignalsReceivedWaiter<'_, F> {
 	type Output = usize;
-	
+
 	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
 		self.owner.waker.register(cx.waker());
 		let value = self.owner.value.load(atomic::Ordering::Acquire);
