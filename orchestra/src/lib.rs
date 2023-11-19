@@ -223,6 +223,26 @@ struct SignalsReceivedInner {
 	value: AtomicUsize,
 }
 
+/// Future to wait on for the watermark predicate
+pub struct SignalsReceivedWaiter<'a, F: Fn(usize) -> bool> {
+	owner: &'a SignalsReceivedInner,
+	predicate: F,
+}
+
+impl<F: Fn(usize) -> bool> Future for SignalsReceivedWaiter<'_, F> {
+	type Output = usize;
+	
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		self.owner.waker.register(cx.waker());
+		let value = self.owner.value.load(atomic::Ordering::Acquire);
+		if (self.predicate)(value) {
+			Poll::Ready(value)
+		} else {
+			Poll::Pending
+		}
+	}
+}
+
 /// Watermark to track the received signals.
 #[derive(Debug, Default, Clone)]
 pub struct SignalsReceived(Arc<SignalsReceivedInner>);
@@ -241,22 +261,10 @@ impl SignalsReceived {
 		let _previous = self.0.value.fetch_add(1, atomic::Ordering::AcqRel);
 		self.0.waker.wake();
 	}
-}
 
-impl Future for SignalsReceived {
-	type Output = ();
-
-	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-		if self.0.waker.take().is_some() {
-			// The waker has already been registered, so we're polled due to `wake()`, that is, the value
-			// has changed.
-			Poll::Ready(())
-		} else {
-			// No waker, so it's the initial poll on `await`. Register the waker and wait for the value to
-			// change.
-			self.0.waker.register(cx.waker());
-			Poll::Pending
-		}
+	/// Wait until a predicate for the watermark is true.
+	pub fn wait_until<F: Fn(usize) -> bool>(&self, predicate: F) -> SignalsReceivedWaiter<F> {
+		SignalsReceivedWaiter { owner: &self.0, predicate }
 	}
 }
 

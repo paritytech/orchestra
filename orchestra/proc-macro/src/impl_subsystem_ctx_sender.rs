@@ -503,9 +503,7 @@ pub(crate) fn impl_subsystem_context_trait_for(
 			async fn recv_msg(&mut self) -> ::std::result::Result<Self::Message, #error_ty> {
 				loop {
 					if let Some((needs_signals_received, msg)) = self.pending_incoming.take() {
-						while self.signals_received.load() < needs_signals_received {
-							self.signals_received.clone().await;
-						}
+						self.signals_received.wait_until(|v| v >= needs_signals_received).await;
 						return Ok(msg);
 					}
 					let msg = self.messages.next().await.ok_or(
