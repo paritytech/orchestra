@@ -75,7 +75,7 @@ pub use futures::{
 	future::{BoxFuture, Fuse, Future},
 	poll, select,
 	stream::{self, select, select_with_strategy, FuturesUnordered, PollNext},
-	task::{AtomicWaker, Context, Poll},
+	task::{Context, Poll},
 	FutureExt, StreamExt,
 };
 #[doc(hidden)]
@@ -217,35 +217,9 @@ pub type SubsystemIncomingMessages<M> = self::stream::SelectWithStrategy<
 	(),
 >;
 
-#[derive(Debug, Default)]
-struct SignalsReceivedInner {
-	waker: AtomicWaker,
-	value: AtomicUsize,
-}
-
-/// Future to wait on for the watermark predicate
-pub struct SignalsReceivedWaiter<'a, F: Fn(usize) -> bool> {
-	owner: &'a SignalsReceivedInner,
-	predicate: F,
-}
-
-impl<F: Fn(usize) -> bool> Future for SignalsReceivedWaiter<'_, F> {
-	type Output = usize;
-
-	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		self.owner.waker.register(cx.waker());
-		let value = self.owner.value.load(atomic::Ordering::Acquire);
-		if (self.predicate)(value) {
-			Poll::Ready(value)
-		} else {
-			Poll::Pending
-		}
-	}
-}
-
 /// Watermark to track the received signals.
 #[derive(Debug, Default, Clone)]
-pub struct SignalsReceived(Arc<SignalsReceivedInner>);
+pub struct SignalsReceived(Arc<AtomicUsize>);
 
 impl SignalsReceived {
 	/// Load the current value of received signals.
@@ -253,18 +227,12 @@ impl SignalsReceived {
 		// It's imperative that we prevent reading a stale value from memory because of reordering.
 		// Memory barrier to ensure that no reads or writes in the current thread before this load are reordered.
 		// All writes in other threads using release semantics become visible to the current thread.
-		self.0.value.load(atomic::Ordering::Acquire)
+		self.0.load(atomic::Ordering::Acquire)
 	}
 
 	/// Increase the number of signals by one.
 	pub fn inc(&self) {
-		let _previous = self.0.value.fetch_add(1, atomic::Ordering::AcqRel);
-		self.0.waker.wake();
-	}
-
-	/// Wait until a predicate for the watermark is true.
-	pub fn wait_until<F: Fn(usize) -> bool>(&self, predicate: F) -> SignalsReceivedWaiter<F> {
-		SignalsReceivedWaiter { owner: &self.0, predicate }
+		let _previous = self.0.fetch_add(1, atomic::Ordering::AcqRel);
 	}
 }
 
@@ -453,9 +421,6 @@ pub trait SubsystemContext: Send + 'static {
 
 	/// Receive a signal.
 	async fn recv_signal(&mut self) -> Result<Self::Signal, Self::Error>;
-
-	/// Receive a message.
-	async fn recv_msg(&mut self) -> Result<Self::Message, Self::Error>;
 
 	/// Spawn a child task on the executor.
 	fn spawn(

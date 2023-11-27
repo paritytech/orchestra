@@ -500,21 +500,6 @@ pub(crate) fn impl_subsystem_context_trait_for(
 				).into())
 			}
 
-			async fn recv_msg(&mut self) -> ::std::result::Result<Self::Message, #error_ty> {
-				loop {
-					if let Some((needs_signals_received, msg)) = self.pending_incoming.take() {
-						self.signals_received.wait_until(|v| v >= needs_signals_received).await;
-						return Ok(msg);
-					}
-					let msg = self.messages.next().await.ok_or(
-						#support_crate ::OrchestraError::Context(
-							"Message channel is terminated and empty.".to_owned()
-						)
-					)?;
-					self.pending_incoming = Some((msg.signals_received, msg.message));
-				}
-			}
-
 			fn sender(&mut self) -> &mut Self::Sender {
 				&mut self.to_subsystems
 			}
