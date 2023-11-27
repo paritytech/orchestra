@@ -420,6 +420,9 @@ pub trait SubsystemContext: Send + 'static {
 	async fn recv(&mut self) -> Result<FromOrchestra<Self::Message, Self::Signal>, Self::Error>;
 
 	/// Receive a signal.
+	///
+	/// This method allows the subsystem to process signals while being blocked on processing messages.
+	/// See `examples/backpressure.rs` for an example.
 	async fn recv_signal(&mut self) -> Result<Self::Signal, Self::Error>;
 
 	/// Spawn a child task on the executor.
