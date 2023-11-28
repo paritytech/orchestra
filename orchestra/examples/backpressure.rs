@@ -146,8 +146,13 @@ impl<Context> SubsystemA {
 
 					loop {
 						select! {
-							sig = ctx.recv_signal().fuse() => {
-								log::info!(target: "subsystem::A", "received SIGNAL {sig:?} in signal-processing loop");
+							signal = ctx.recv_signal().fuse() => {
+								match signal {
+									Ok(sig) => log::info!(target: "subsystem::A", "received SIGNAL {sig:?} in signal-processing loop"),
+									Err(_) => {
+										break 'outer;
+									}
+								}
 							},
 							id = tasks.select_next_some() => {
 								log::info!(target: "subsystem::A", "task {id} finished in signal-processing loop");
