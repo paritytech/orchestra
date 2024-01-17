@@ -100,6 +100,14 @@ impl Meter {
 		}
 	}
 
+	/// Returns the number of messages that are in the queue waiting
+	/// to be received.
+	pub fn num_in_queue(&self) -> usize {
+		let num_sent = self.sent.load(Ordering::Relaxed);
+		let num_received = self.received.load(Ordering::Relaxed);
+		num_sent.checked_sub(num_received).unwrap_or_default()
+	}
+
 	fn note_sent(&self) -> usize {
 		self.sent.fetch_add(1, Ordering::Relaxed)
 	}

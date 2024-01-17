@@ -59,6 +59,7 @@
 #![deny(missing_docs)]
 // #![deny(unused_crate_dependencies)]
 
+use metered::Meter;
 pub use orchestra_proc_macro::{contextbounds, orchestra, subsystem};
 
 #[doc(hidden)]
@@ -469,6 +470,12 @@ pub trait SubsystemContext: Send + 'static {
 
 	/// Obtain the sender.
 	fn sender(&mut self) -> &mut Self::Sender;
+
+	/// Returns the `Meter for the bounded channel of this subsystem.
+	fn bounded_meter(&self) -> Meter;
+
+	/// Returns the `Meter` for the unbounded channel of this subsytem
+	fn unbounded_meter(&self) -> Meter;
 }
 
 /// A trait that describes the [`Subsystem`]s that can run on the [`Orchestra`].

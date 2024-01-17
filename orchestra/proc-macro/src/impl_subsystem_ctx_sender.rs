@@ -498,6 +498,16 @@ pub(crate) fn impl_subsystem_context_trait_for(
 				&mut self.to_subsystems
 			}
 
+			fn unbounded_meter(&self) -> Meter {
+				let (_, st2) = &self.messages.get_ref();
+				st2.meter().clone()
+			}
+
+			fn bounded_meter(&self) -> Meter {
+				let (st1, _) = &self.messages.get_ref();
+				st1.meter().clone()
+			}
+
 			fn spawn(&mut self, name: &'static str, s: Pin<Box<dyn Future<Output = ()> + Send>>)
 				-> ::std::result::Result<(), #error_ty>
 			{
