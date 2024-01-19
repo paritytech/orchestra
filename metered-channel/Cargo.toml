@@ -1,6 +1,6 @@
 [package]
 name = "prioritized-metered-channel"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "Channels with built-in observability and optional message priorizitazion"
