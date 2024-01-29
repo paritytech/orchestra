@@ -495,9 +495,13 @@ pub(crate) fn impl_subsystem_context_trait_for(
 			}
 
 			async fn recv_signal(&mut self) -> ::std::result::Result<#signal, #error_ty> {
-				self.signals.next().await.ok_or(#support_crate ::OrchestraError::Context(
+				let result = self.signals.next().await.ok_or(#support_crate ::OrchestraError::Context(
 					"Signal channel is terminated and empty.".to_owned(),
-				).into())
+				).into());
+				if result.is_ok() {
+					self.signals_received.inc();
+				}
+				result
 			}
 
 			fn sender(&mut self) -> &mut Self::Sender {
