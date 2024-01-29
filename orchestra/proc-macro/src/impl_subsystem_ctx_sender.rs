@@ -498,7 +498,7 @@ pub(crate) fn impl_subsystem_context_trait_for(
 				let result = self.signals.next().await.ok_or(#support_crate ::OrchestraError::Context(
 					"Signal channel is terminated and empty.".to_owned(),
 				).into());
-				if let Ok(_) = result {
+				if result.is_ok() {
 					self.signals_received.inc();
 				}
 				result
