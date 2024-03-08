@@ -352,6 +352,8 @@ pub struct SubsystemInstance<Message, Signal> {
 	pub tx_signal: crate::metered::MeteredSender<Signal>,
 	/// Send sink for `Message`s to be sent to a subsystem.
 	pub tx_bounded: crate::metered::MeteredSender<MessagePacket<Message>>,
+	/// Unbounded send sink for `Message`s to be sent to a subsystem.
+	pub tx_unbounded: crate::metered::UnboundedMeteredSender<MessagePacket<Message>>,
 	/// All meters of the particular subsystem instance.
 	pub meters: SubsystemMeters,
 	/// The number of signals already received.
