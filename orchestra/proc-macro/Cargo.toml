@@ -18,7 +18,7 @@ proc-macro = true
 syn = { version = "1.0.109", features = ["full", "extra-traits"] }
 quote = "1.0.20"
 proc-macro2 = { version = "1.0.47", features = ["span-locations"] }
-proc-macro-crate = "1.1.3"
+proc-macro-crate = "3.1.0"
 expander = { version = "2.0.0", default-features = false }
 petgraph = "0.6.0"
 itertools = { version = "0.11" }
