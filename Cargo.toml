@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
-version = "0.3.5"
+version = "0.3.6"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/paritytech/orchestra"
