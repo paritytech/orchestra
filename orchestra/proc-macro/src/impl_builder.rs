@@ -635,9 +635,10 @@ pub(crate) fn impl_feature_gated_items(
 				#(
 					let (#channel_name_tx, #channel_name_rx)
 					=
-						#support_crate ::metered::channel::<
+						#support_crate ::metered::channel_with_priority::<
 							MessagePacket< #maybe_boxed_consumes >
 						>(
+							self.channel_capacity.unwrap_or(#message_channel_capacity),
 							self.channel_capacity.unwrap_or(#message_channel_capacity)
 						);
 				)*

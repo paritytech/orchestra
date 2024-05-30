@@ -503,6 +503,9 @@ where
 	/// Send a direct message to some other `Subsystem`, routed based on message type.
 	async fn send_message(&mut self, msg: OutgoingMessage);
 
+	/// Send a direct priority message to some other `Subsystem`, routed based on message type.
+	async fn priority_send_message(&mut self, msg: OutgoingMessage);
+
 	/// Tries to send a direct message to some other `Subsystem`, routed based on message type.
 	/// This method is useful for cases where the message queue is bounded and the message is ok
 	/// to be dropped if the queue is full. If the queue is full, this method will return an error.

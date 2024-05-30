@@ -81,14 +81,21 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
+				use_priority_channel: bool,
 			) {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						self. #channel_name .send(
-							#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-						).await.map_err(|_| stringify!( #channel_name ))
+						if use_priority_channel {
+							self. #channel_name .priority_send(
+								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+							).await.map_err(|_| stringify!( #channel_name ))
+						} else {
+							self. #channel_name .send(
+								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+							).await.map_err(|_| stringify!( #channel_name ))
+						}
 					}
 				)*
 					// subsystems that are wip

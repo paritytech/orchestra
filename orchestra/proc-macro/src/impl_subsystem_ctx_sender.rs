@@ -282,7 +282,19 @@ pub(crate) fn impl_subsystem_sender(
 						self.signals_received.load(),
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
-						)
+						),
+						false,
+					).await;
+				}
+
+				async fn priority_send_message(&mut self, msg: OutgoingMessage)
+				{
+					self.channels.send_and_log_error(
+						self.signals_received.load(),
+						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
+							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
+						),
+						true
 					).await;
 				}
 
