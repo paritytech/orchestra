@@ -15,10 +15,6 @@
 
 use futures::executor::ThreadPool;
 use orchestra::*;
-use std::sync::{
-	atomic::{AtomicU8, Ordering},
-	Arc,
-};
 
 struct SubA {
 	regular: Vec<u8>,
@@ -26,7 +22,8 @@ struct SubA {
 }
 
 pub struct SubB {
-	messages: Vec<Arc<AtomicU8>>,
+	message_limit: usize,
+	result_sender: oneshot::Sender<Vec<u8>>,
 }
 
 impl SubA {
@@ -36,8 +33,8 @@ impl SubA {
 }
 
 impl SubB {
-	fn new(messages: Vec<Arc<AtomicU8>>) -> Self {
-		Self { messages }
+	fn new(message_limit: usize, result_sender: oneshot::Sender<Vec<u8>>) -> Self {
+		Self { message_limit, result_sender }
 	}
 }
 
@@ -65,16 +62,18 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgB>, OrchestraError> for SubB 
 		SpawnedSubsystem {
 			name: "sub B",
 			future: Box::pin(async move {
+				let mut messages = vec![];
 				// Wait until sub_a sends all messages
 				futures_timer::Delay::new(Duration::from_millis(50)).await;
-				for i in self.messages {
+				for _ in 0..self.message_limit {
 					match ctx.recv().await.unwrap() {
 						FromOrchestra::Communication { msg } => {
-							i.store(msg.0, Ordering::SeqCst);
+							messages.push(msg.0);
 						},
 						_ => panic!("unexpected message"),
 					}
 				}
+				self.result_sender.send(messages).unwrap();
 
 				Ok(())
 			}),
@@ -130,16 +129,11 @@ pub struct Orchestra {
 
 #[test]
 fn test_priority_send_message() {
+	let (tx, mut rx) = oneshot::channel::<Vec<u8>>();
 	let regular = vec![1, 2, 3];
 	let priority = vec![42];
-	let messages = vec![
-		Arc::new(AtomicU8::new(0)),
-		Arc::new(AtomicU8::new(0)),
-		Arc::new(AtomicU8::new(0)),
-		Arc::new(AtomicU8::new(0)),
-	];
 	let sub_a = SubA::new(regular.clone(), priority.clone());
-	let sub_b = SubB::new(messages.clone());
+	let sub_b = SubB::new(regular.len() + priority.len(), tx);
 	let pool = ThreadPool::new().unwrap();
 	let (orchestra, _handle) = Orchestra::builder()
 		.sub_a(sub_a)
@@ -156,6 +150,6 @@ fn test_priority_send_message() {
 
 	assert_eq!(
 		priority.into_iter().chain(regular.into_iter()).collect::<Vec<u8>>(),
-		messages.iter().map(|i| i.load(Ordering::SeqCst)).collect::<Vec<u8>>()
+		rx.try_recv().unwrap().unwrap()
 	);
 }
