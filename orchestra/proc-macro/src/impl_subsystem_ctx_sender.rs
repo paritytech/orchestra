@@ -283,7 +283,7 @@ pub(crate) fn impl_subsystem_sender(
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
 						),
-						false,
+						ChannelsOutPriority::Normal,
 					).await;
 				}
 
@@ -294,7 +294,7 @@ pub(crate) fn impl_subsystem_sender(
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
 						),
-						true
+						ChannelsOutPriority::High,
 					).await;
 				}
 

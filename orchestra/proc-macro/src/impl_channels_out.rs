@@ -73,6 +73,14 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 			)*
 		}
 
+		/// Priority of messages sending to the individual subsystems.
+		/// Only for the bounded channel sender.
+		#[derive(Debug)]
+		pub enum ChannelsOutPriority {
+			Normal,
+			High,
+		}
+
 		#[allow(unreachable_code)]
 		// when no defined messages in enum
 		impl ChannelsOut {
@@ -81,13 +89,13 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
-				use_priority_channel: bool,
+				priority: ChannelsOutPriority,
 			) {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						if use_priority_channel {
+						if matches!(priority, ChannelsOutPriority::High) {
 							self. #channel_name .priority_send(
 								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 							).await.map_err(|_| stringify!( #channel_name ))
