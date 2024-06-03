@@ -304,7 +304,22 @@ pub(crate) fn impl_subsystem_sender(
 						self.signals_received.load(),
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
-						)
+						),
+						ChannelsOutPriority::Normal,
+					).map_err(|err| match err {
+								#support_crate ::metered::TrySendError::Full(inner) => #support_crate ::metered::TrySendError::Full(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),
+								#support_crate ::metered::TrySendError::Closed(inner) => #support_crate ::metered::TrySendError::Closed(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),
+						})
+				}
+
+				fn try_priority_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
+				{
+					self.channels.try_send(
+						self.signals_received.load(),
+						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
+							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
+						),
+						ChannelsOutPriority::High,
 					).map_err(|err| match err {
 								#support_crate ::metered::TrySendError::Full(inner) => #support_crate ::metered::TrySendError::Full(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),
 								#support_crate ::metered::TrySendError::Closed(inner) => #support_crate ::metered::TrySendError::Closed(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),

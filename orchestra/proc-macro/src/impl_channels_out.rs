@@ -135,17 +135,27 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
+				priority: ChannelsOutPriority,
 			) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<#message_wrapper>> {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						self. #channel_name .try_send(
-							#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-						).map_err(|err| match err {
-								#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-								#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-						})
+						if matches!(priority, ChannelsOutPriority::High) {
+							self. #channel_name .try_priority_send(
+								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+							).map_err(|err| match err {
+									#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+									#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+							})
+						} else {
+							self. #channel_name .try_send(
+								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+							).map_err(|err| match err {
+									#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+									#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+							})
+						}
 					}
 				)*
 					// subsystems that are wip
