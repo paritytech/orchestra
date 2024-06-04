@@ -25,22 +25,33 @@ struct SubA {
 	regular: Vec<u8>,
 	priority: Vec<u8>,
 	sending_method: SendingMethod,
+	ready_sender: oneshot::Sender<()>,
 }
 
 pub struct SubB {
 	message_limit: usize,
 	result_sender: oneshot::Sender<Vec<u8>>,
+	ready_receiver: oneshot::Receiver<()>,
 }
 
 impl SubA {
-	fn new(regular: Vec<u8>, priority: Vec<u8>, sending_method: SendingMethod) -> Self {
-		Self { regular, priority, sending_method }
+	fn new(
+		regular: Vec<u8>,
+		priority: Vec<u8>,
+		sending_method: SendingMethod,
+		ready_sender: oneshot::Sender<()>,
+	) -> Self {
+		Self { regular, priority, sending_method, ready_sender }
 	}
 }
 
 impl SubB {
-	fn new(message_limit: usize, result_sender: oneshot::Sender<Vec<u8>>) -> Self {
-		Self { message_limit, result_sender }
+	fn new(
+		message_limit: usize,
+		result_sender: oneshot::Sender<Vec<u8>>,
+		ready_receiver: oneshot::Receiver<()>,
+	) -> Self {
+		Self { message_limit, result_sender, ready_receiver }
 	}
 }
 
@@ -64,6 +75,8 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgA>, OrchestraError> for SubA 
 					}
 				}
 
+				self.ready_sender.send(()).unwrap();
+
 				Ok(())
 			}),
 		}
@@ -77,7 +90,7 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgB>, OrchestraError> for SubB 
 			future: Box::pin(async move {
 				let mut messages = vec![];
 				// Wait until sub_a sends all messages
-				futures_timer::Delay::new(Duration::from_millis(50)).await;
+				self.ready_receiver.await.unwrap();
 				for _ in 0..self.message_limit {
 					match ctx.recv().await.unwrap() {
 						FromOrchestra::Communication { msg } => {
@@ -142,11 +155,12 @@ pub struct Orchestra {
 
 #[test]
 fn test_priority_send_message() {
-	let (tx, mut rx) = oneshot::channel::<Vec<u8>>();
+	let (result_tx, mut result_rx) = oneshot::channel::<Vec<u8>>();
+	let (ready_tx, ready_rx) = oneshot::channel::<()>();
 	let regular = vec![1, 2, 3];
 	let priority = vec![42];
-	let sub_a = SubA::new(regular.clone(), priority.clone(), SendingMethod::Send);
-	let sub_b = SubB::new(regular.len() + priority.len(), tx);
+	let sub_a = SubA::new(regular.clone(), priority.clone(), SendingMethod::Send, ready_tx);
+	let sub_b = SubB::new(regular.len() + priority.len(), result_tx, ready_rx);
 	let pool = ThreadPool::new().unwrap();
 	let (orchestra, _handle) = Orchestra::builder()
 		.sub_a(sub_a)
@@ -163,17 +177,18 @@ fn test_priority_send_message() {
 
 	assert_eq!(
 		priority.into_iter().chain(regular.into_iter()).collect::<Vec<u8>>(),
-		rx.try_recv().unwrap().unwrap()
+		result_rx.try_recv().unwrap().unwrap()
 	);
 }
 
 #[test]
 fn test_try_priority_send_message() {
-	let (tx, mut rx) = oneshot::channel::<Vec<u8>>();
+	let (result_tx, mut result_rx) = oneshot::channel::<Vec<u8>>();
+	let (ready_tx, ready_rx) = oneshot::channel::<()>();
 	let regular = vec![1, 2, 3];
 	let priority = vec![42];
-	let sub_a = SubA::new(regular.clone(), priority.clone(), SendingMethod::TrySend);
-	let sub_b = SubB::new(regular.len() + priority.len(), tx);
+	let sub_a = SubA::new(regular.clone(), priority.clone(), SendingMethod::TrySend, ready_tx);
+	let sub_b = SubB::new(regular.len() + priority.len(), result_tx, ready_rx);
 	let pool = ThreadPool::new().unwrap();
 	let (orchestra, _handle) = Orchestra::builder()
 		.sub_a(sub_a)
@@ -190,6 +205,6 @@ fn test_try_priority_send_message() {
 
 	assert_eq!(
 		priority.into_iter().chain(regular.into_iter()).collect::<Vec<u8>>(),
-		rx.try_recv().unwrap().unwrap()
+		result_rx.try_recv().unwrap().unwrap()
 	);
 }
