@@ -91,9 +91,9 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			>,
 
 			/// Gather running subsystems' outbound streams into one.
-			to_orchestra_rx: #support_crate ::stream::Fuse<
+			to_orchestra_rx: Option<#support_crate ::stream::Fuse<
 				#support_crate ::metered::UnboundedMeteredReceiver< #support_crate ::ToOrchestra >
-			>,
+			>>,
 
 			/// Events that are sent to the orchestra from the outside world.
 			events_rx: #support_crate ::metered::MeteredReceiver< #event_ty >,
@@ -175,12 +175,17 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 			}
 
 			/// Route a particular message to a subsystem that consumes the message.
-			pub async fn route_message(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+			pub async fn route_message(&mut self, message: #message_wrapper, origin: &'static str, unbounded: bool) -> ::std::result::Result<(), #error_ty > {
 				match message {
 					#(
 						#feature_gates
-						#message_wrapper :: #consumes_variant ( inner ) =>
-							OrchestratedSubsystem::< #consumes >::send_message2(&mut self. #subsystem_name, inner, origin ).await?,
+						#message_wrapper :: #consumes_variant ( inner ) => {
+							if unbounded {
+								OrchestratedSubsystem::< #consumes >::unbounded_send_message2(&mut self. #subsystem_name, inner, origin ).await?
+							} else {
+								OrchestratedSubsystem::< #consumes >::send_message2(&mut self. #subsystem_name, inner, origin ).await?
+							}
+						}
 					)*
 					// subsystems that are still work in progress
 					#(
@@ -286,6 +291,23 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 								#support_crate ::OrchestraError::QueueError
 							)),
 					}
+				} else {
+					Ok(())
+				}
+			}
+
+			/// Send a message to the wrapped subsystem.
+			///
+			/// If the inner `instance` is `None`, nothing is happening.
+			pub async fn unbounded_send_message2(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+				if let Some(ref mut instance) = self.instance {
+					instance.tx_unbounded.unbounded_send(MessagePacket {
+						signals_received: instance.signals_received,
+						message: #maybe_boxed_message,
+					}).map_err(|_| #error_ty :: from(
+								#support_crate ::OrchestraError::QueueError
+							))
+
 				} else {
 					Ok(())
 				}
