@@ -166,7 +166,7 @@ pub struct Orchestra {
 	#[subsystem(consumes: MsgA, sends: [MsgB])]
 	sub_a: SubA,
 
-	#[subsystem(consumes: MsgB, sends: [MsgA], with_priority_channel)]
+	#[subsystem(consumes: MsgB, sends: [MsgA], can_receive_priority_messages)]
 	sub_b: SubB,
 }
 
