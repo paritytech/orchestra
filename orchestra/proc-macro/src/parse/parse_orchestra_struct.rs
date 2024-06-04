@@ -40,6 +40,7 @@ mod kw {
 	syn::custom_keyword!(sends);
 	syn::custom_keyword!(message_capacity);
 	syn::custom_keyword!(signal_capacity);
+	syn::custom_keyword!(with_priority_messages);
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +59,8 @@ pub(crate) enum SubSysAttrItem {
 	MessageChannelCapacity(ChannelCapacity<kw::message_capacity>),
 	/// Custom signal channels capacity for this subsystem
 	SignalChannelCapacity(ChannelCapacity<kw::signal_capacity>),
+	/// The subsystem can use priority messages
+	WithPriorityMessages(kw::with_priority_messages),
 }
 
 impl Parse for SubSysAttrItem {
@@ -73,6 +76,8 @@ impl Parse for SubSysAttrItem {
 			Self::MessageChannelCapacity(input.parse::<ChannelCapacity<kw::message_capacity>>()?)
 		} else if lookahead.peek(kw::signal_capacity) {
 			Self::SignalChannelCapacity(input.parse::<ChannelCapacity<kw::signal_capacity>>()?)
+		} else if lookahead.peek(kw::with_priority_messages) {
+			Self::WithPriorityMessages(input.parse::<kw::with_priority_messages>()?)
 		} else {
 			Self::Consumes(input.parse::<Consumes>()?)
 		})
@@ -99,6 +104,9 @@ impl ToTokens for SubSysAttrItem {
 			},
 			Self::SignalChannelCapacity(_) => {
 				quote! {}
+			},
+			Self::WithPriorityMessages(with_priority_messages) => {
+				quote! { #with_priority_messages }
 			},
 		};
 		tokens.extend(ts.into_iter());
@@ -130,6 +138,8 @@ pub(crate) struct SubSysField {
 	pub(crate) message_capacity: Option<usize>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
+	/// The subsystem can use priority messages
+	pub(crate) with_priority_messages: bool,
 
 	pub(crate) feature_gates: Option<CfgPredicate>,
 }
@@ -352,6 +362,8 @@ pub(crate) struct SubSystemAttrItems {
 	pub(crate) message_capacity: Option<ChannelCapacity<kw::message_capacity>>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<ChannelCapacity<kw::signal_capacity>>,
+	/// The subsystem can use priority messages
+	pub(crate) with_priority_messages: bool,
 }
 
 impl Parse for SubSystemAttrItems {
@@ -393,8 +405,18 @@ impl Parse for SubSystemAttrItems {
 		let wip = extract_variant!(unique, Wip; default = false);
 		let message_capacity = extract_variant!(unique, MessageChannelCapacity take );
 		let signal_capacity = extract_variant!(unique, SignalChannelCapacity take );
+		let with_priority_messages =
+			extract_variant!(unique, WithPriorityMessages; default = false);
 
-		Ok(Self { blocking, wip, sends, consumes, message_capacity, signal_capacity })
+		Ok(Self {
+			blocking,
+			wip,
+			sends,
+			consumes,
+			message_capacity,
+			signal_capacity,
+			with_priority_messages,
+		})
 	}
 }
 
@@ -738,6 +760,7 @@ impl OrchestraGuts {
 					sends,
 					message_capacity,
 					signal_capacity,
+					with_priority_messages,
 					..
 				} = subsystem_attrs;
 
@@ -761,6 +784,7 @@ impl OrchestraGuts {
 					message_capacity,
 					signal_capacity,
 					feature_gates,
+					with_priority_messages,
 				});
 			} else {
 				// collect the "baggage"

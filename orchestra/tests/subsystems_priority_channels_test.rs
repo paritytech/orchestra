@@ -146,10 +146,10 @@ impl Spawner for DummySpawner {
 
 #[orchestra(signal=SigSigSig, event=Event, gen=AllMessages, error=OrchestraError, boxed_messages=true)]
 pub struct Orchestra {
-	#[subsystem(consumes: MsgA, sends: [MsgB])]
+	#[subsystem(consumes: MsgA, sends: [MsgB], with_priority_messages)]
 	sub_a: SubA,
 
-	#[subsystem(consumes: MsgB, sends: [MsgA])]
+	#[subsystem(consumes: MsgB, sends: [MsgA], with_priority_messages)]
 	sub_b: SubB,
 }
 
