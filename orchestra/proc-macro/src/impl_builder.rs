@@ -175,6 +175,8 @@ pub(crate) fn impl_feature_gated_items(
 	let channel_name_rx = &cfg_set.channel_names_without_wip("_rx");
 	let channel_name_unbounded_rx = &info.channel_names_without_wip("_unbounded_rx");
 
+	let with_priority_channel = &cfg_set.with_priority_channel_without_wip();
+
 	let baggage_name = &info.baggage_names();
 	let baggage_generic_ty = &info.baggage_generic_types();
 
@@ -633,14 +635,20 @@ pub(crate) fn impl_feature_gated_items(
 				>();
 
 				#(
-					let (#channel_name_tx, #channel_name_rx)
-					=
+					let (#channel_name_tx, #channel_name_rx) = if #with_priority_channel {
 						#support_crate ::metered::channel_with_priority::<
 							MessagePacket< #maybe_boxed_consumes >
 						>(
 							self.channel_capacity.unwrap_or(#message_channel_capacity),
 							self.channel_capacity.unwrap_or(#message_channel_capacity)
-						);
+						)
+					} else {
+						#support_crate ::metered::channel::<
+							MessagePacket< #maybe_boxed_consumes >
+						>(
+							self.channel_capacity.unwrap_or(#message_channel_capacity)
+						)
+					};
 				)*
 
 				#(
