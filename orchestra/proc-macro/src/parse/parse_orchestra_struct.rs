@@ -928,6 +928,6 @@ pub(crate) fn can_receive_priority_messages_without_wip(
 	subsystems
 		.iter()
 		.filter(|ssf| !ssf.wip)
-		.map(|ssf| if ssf.can_receive_priority_messages { quote!(true) } else { quote!(false) })
+		.map(|ssf| if syn::LitBool::new(ssf.can_receive_priority_messages, ssf.ident.span()))
 		.collect::<Vec<_>>()
 }
