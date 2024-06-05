@@ -510,7 +510,7 @@ impl<'a> SubsystemConfigSet<'a> {
 		signal_channel_capacities_without_wip(&self.enabled_subsystems, default_capacity)
 	}
 
-	pub(crate) fn can_receive_priority_messages_without_wip(&self) -> Vec<TokenStream> {
+	pub(crate) fn can_receive_priority_messages_without_wip(&self) -> Vec<syn::LitBool> {
 		can_receive_priority_messages_without_wip(&self.enabled_subsystems)
 	}
 }
@@ -924,10 +924,10 @@ pub(crate) fn consumes_without_wip<'a, T: Borrow<SubSysField>>(subsystems: &[T])
 
 pub(crate) fn can_receive_priority_messages_without_wip(
 	subsystems: &Vec<&SubSysField>,
-) -> Vec<TokenStream> {
+) -> Vec<syn::LitBool> {
 	subsystems
 		.iter()
 		.filter(|ssf| !ssf.wip)
-		.map(|ssf| if syn::LitBool::new(ssf.can_receive_priority_messages, ssf.ident.span()))
+		.map(|ssf| syn::LitBool::new(ssf.can_receive_priority_messages, ssf.name.span()))
 		.collect::<Vec<_>>()
 }
