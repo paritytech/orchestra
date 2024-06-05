@@ -75,35 +75,57 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 
 		/// Priority of messages sending to the individual subsystems.
 		/// Only for the bounded channel sender.
-		#[derive(Debug)]
-		pub enum ChannelsOutPriority {
+		pub enum PriorityLevel {
 			Normal,
 			High,
+		}
+
+		trait Priority {
+			fn priority() -> PriorityLevel {
+				PriorityLevel::Normal
+			}
+		}
+
+		struct NormalPriority;
+		struct HighPriority;
+
+		impl Priority for NormalPriority {
+			fn priority() -> PriorityLevel {
+				PriorityLevel::Normal
+			}
+		}
+
+		impl Priority for HighPriority {
+			fn priority() -> PriorityLevel {
+				PriorityLevel::High
+			}
 		}
 
 		#[allow(unreachable_code)]
 		// when no defined messages in enum
 		impl ChannelsOut {
 			/// Send a message via a bounded channel.
-			pub async fn send_and_log_error(
+			pub async fn send_and_log_error<P: Priority>(
 				&mut self,
 				signals_received: usize,
-				message: #message_wrapper,
-				priority: ChannelsOutPriority,
+				message: #message_wrapper
 			) {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						if matches!(priority, ChannelsOutPriority::High) {
-							self. #channel_name .priority_send(
-								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-							).await.map_err(|_| stringify!( #channel_name ))
-						} else {
-							self. #channel_name .send(
-								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-							).await.map_err(|_| stringify!( #channel_name ))
-						}
+						match P::priority() {
+							PriorityLevel::Normal => {
+								self. #channel_name .send(
+									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+								).await
+							},
+							PriorityLevel::High => {
+								self. #channel_name .priority_send(
+									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+								).await
+							},
+						}.map_err(|_| stringify!( #channel_name ))
 					}
 				)*
 					// subsystems that are wip
@@ -131,31 +153,30 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 			}
 
 			/// Try to send a message via a bounded channel.
-			pub fn try_send(
+			pub fn try_send<P: Priority>(
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
-				priority: ChannelsOutPriority,
 			) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<#message_wrapper>> {
 				let res: ::std::result::Result<_, _> = match message {
 				#(
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
-						if matches!(priority, ChannelsOutPriority::High) {
-							self. #channel_name .try_priority_send(
-								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-							).map_err(|err| match err {
-									#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-									#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-							})
-						} else {
-							self. #channel_name .try_send(
-								#support_crate ::make_packet(signals_received, #maybe_boxed_send)
-							).map_err(|err| match err {
-									#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-									#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
-							})
-						}
+						match P::priority() {
+							PriorityLevel::Normal => {
+								self. #channel_name .try_send(
+									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+								)
+							},
+							PriorityLevel::High => {
+								self. #channel_name .try_priority_send(
+									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
+								)
+							},
+						}.map_err(|err| match err {
+								#support_crate ::metered::TrySendError::Full(err_inner) => #support_crate ::metered::TrySendError::Full(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+								#support_crate ::metered::TrySendError::Closed(err_inner) => #support_crate ::metered::TrySendError::Closed(#message_wrapper:: #consumes_variant ( #maybe_unbox_error )),
+						})
 					}
 				)*
 					// subsystems that are wip
