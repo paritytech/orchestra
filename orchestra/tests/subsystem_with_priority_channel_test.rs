@@ -26,18 +26,22 @@ struct SubA {
 	normal: Vec<u8>,
 	priority: Vec<u8>,
 	sending_method: SendingMethod,
-	sub_b_sent_rx: oneshot::Receiver<()>,
-	sub_a_sent_tx: oneshot::Sender<()>,
 	sub_a_received_tx: oneshot::Sender<Vec<u8>>,
+	sub_a_sent_tx: oneshot::Sender<()>,
+	sub_a_ready_for_signal_tx: oneshot::Sender<()>,
+	sub_b_sent_rx: oneshot::Receiver<()>,
+	orchestra_sent_to_sub_a_rx: oneshot::Receiver<()>,
 }
 
 pub struct SubB {
 	normal: Vec<u8>,
 	priority: Vec<u8>,
 	sending_method: SendingMethod,
-	sub_a_sent_rx: oneshot::Receiver<()>,
-	sub_b_sent_tx: oneshot::Sender<()>,
 	sub_b_received_tx: oneshot::Sender<Vec<u8>>,
+	sub_b_sent_tx: oneshot::Sender<()>,
+	sub_b_ready_for_signal_tx: oneshot::Sender<()>,
+	sub_a_sent_rx: oneshot::Receiver<()>,
+	orchestra_sent_to_sub_b_rx: oneshot::Receiver<()>,
 }
 
 impl crate::Subsystem<OrchestraSubsystemContext<MsgA>, OrchestraError> for SubA {
@@ -63,15 +67,25 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgA>, OrchestraError> for SubA 
 					}
 				}
 
+				// Inform that the messages have been sent.
 				self.sub_a_sent_tx.send(()).unwrap();
+				self.sub_a_ready_for_signal_tx.send(()).unwrap();
+
+				// Wait for others
+				self.orchestra_sent_to_sub_a_rx.await.unwrap();
 				self.sub_b_sent_rx.await.unwrap();
 
-				for _ in 0..message_limit {
-					match ctx.recv().await.unwrap() {
+				while let Ok(received) = ctx.recv().await {
+					match received {
 						FromOrchestra::Communication { msg } => {
 							messages.push(msg.0);
 						},
-						_ => panic!("unexpected message"),
+						FromOrchestra::Signal(SigSigSig) => {
+							messages.push(u8::MAX);
+						},
+					}
+					if messages.len() > message_limit {
+						break;
 					}
 				}
 				self.sub_a_received_tx.send(messages).unwrap();
@@ -105,15 +119,25 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgB>, OrchestraError> for SubB 
 					}
 				}
 
+				// Inform that the messages have been sent.
 				self.sub_b_sent_tx.send(()).unwrap();
+				self.sub_b_ready_for_signal_tx.send(()).unwrap();
+
+				// Wait for others
+				self.orchestra_sent_to_sub_b_rx.await.unwrap();
 				self.sub_a_sent_rx.await.unwrap();
 
-				for _ in 0..message_limit {
-					match ctx.recv().await.unwrap() {
+				while let Ok(received) = ctx.recv().await {
+					match received {
 						FromOrchestra::Communication { msg } => {
 							messages.push(msg.0);
 						},
-						_ => panic!("unexpected message"),
+						FromOrchestra::Signal(SigSigSig) => {
+							messages.push(u8::MAX);
+						},
+					}
+					if messages.len() > message_limit {
+						break;
 					}
 				}
 				self.sub_b_received_tx.send(messages).unwrap();
@@ -177,32 +201,54 @@ async fn run_inner(
 ) -> (Vec<u8>, Vec<u8>) {
 	let (sub_a_received_tx, mut sub_a_received_rx) = oneshot::channel::<Vec<u8>>();
 	let (sub_b_received_tx, mut sub_b_received_rx) = oneshot::channel::<Vec<u8>>();
+
 	let (sub_a_sent_tx, sub_a_sent_rx) = oneshot::channel::<()>();
+	let (sub_a_ready_for_signal_tx, sub_a_ready_for_signal_rx) = oneshot::channel::<()>();
+
 	let (sub_b_sent_tx, sub_b_sent_rx) = oneshot::channel::<()>();
+	let (sub_b_ready_for_signal_tx, sub_b_ready_for_signal_rx) = oneshot::channel::<()>();
+
+	let (orchestra_sent_to_sub_a_tx, orchestra_sent_to_sub_a_rx) = oneshot::channel::<()>();
+	let (orchestra_sent_to_sub_b_tx, orchestra_sent_to_sub_b_rx) = oneshot::channel::<()>();
 
 	let sub_a = SubA {
 		normal: normal.clone(),
 		priority: priority.clone(),
 		sending_method,
-		sub_b_sent_rx,
 		sub_a_sent_tx,
 		sub_a_received_tx,
+		sub_a_ready_for_signal_tx,
+		orchestra_sent_to_sub_a_rx,
+		sub_b_sent_rx,
 	};
 	let sub_b = SubB {
 		normal: normal.clone(),
 		priority: priority.clone(),
 		sending_method,
-		sub_a_sent_rx,
 		sub_b_sent_tx,
 		sub_b_received_tx,
+		sub_b_ready_for_signal_tx,
+		orchestra_sent_to_sub_b_rx,
+		sub_a_sent_rx,
 	};
 	let pool = ThreadPool::new().unwrap();
-	let (orchestra, _handle) = Orchestra::builder()
+	let (mut orchestra, _handle) = Orchestra::builder()
 		.sub_a(sub_a)
 		.sub_b(sub_b)
 		.spawner(DummySpawner(pool))
 		.build()
 		.unwrap();
+
+	// Wait until both subsystems sent their messages
+	sub_a_ready_for_signal_rx.await.unwrap();
+	sub_b_ready_for_signal_rx.await.unwrap();
+
+	// Subsystems are waiting for a signal from the orchestra
+	orchestra.broadcast_signal(SigSigSig).await.unwrap();
+
+	// Allow both subsystems to receive messages
+	orchestra_sent_to_sub_a_tx.send(()).unwrap();
+	orchestra_sent_to_sub_b_tx.send(()).unwrap();
 
 	for run_subsystem in orchestra.running_subsystems {
 		run_subsystem.await.unwrap();
@@ -216,8 +262,16 @@ fn test_priority_send_message() {
 	let (sub_a_received, sub_b_received) =
 		futures::executor::block_on(run_inner(vec![1, 2, 3], vec![42], SendingMethod::Send));
 
-	assert_eq!(vec![1, 2, 3, 42], sub_a_received);
-	assert_eq!(vec![42, 1, 2, 3], sub_b_received);
+	// SubA can't receive priority messages, so it receives messages in the order they were sent
+	// u8::MAX - signal is first
+	// 1, 2, 3 - normal messages
+	// 42 - priority message
+	assert_eq!(vec![u8::MAX, 1, 2, 3, 42], sub_a_received);
+	// SubB receive priority messages first
+	// u8::MAX - signal is first
+	// 42 - priority message
+	// 1, 2, 3 - normal messages
+	assert_eq!(vec![u8::MAX, 42, 1, 2, 3], sub_b_received);
 }
 
 #[test]
@@ -225,6 +279,14 @@ fn test_try_priority_send_message() {
 	let (sub_a_received, sub_b_received) =
 		futures::executor::block_on(run_inner(vec![1, 2, 3], vec![42], SendingMethod::TrySend));
 
-	assert_eq!(vec![1, 2, 3, 42], sub_a_received);
-	assert_eq!(vec![42, 1, 2, 3], sub_b_received);
+	// SubA can't receive priority messages, so it receives messages in the order they were sent
+	// u8::MAX - signal is first
+	// 1, 2, 3 - normal messages
+	// 42 - priority message
+	assert_eq!(vec![u8::MAX, 1, 2, 3, 42], sub_a_received);
+	// SubB receive priority messages first
+	// u8::MAX - signal is first
+	// 42 - priority message
+	// 1, 2, 3 - normal messages
+	assert_eq!(vec![u8::MAX, 42, 1, 2, 3], sub_b_received);
 }
