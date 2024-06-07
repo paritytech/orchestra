@@ -278,21 +278,31 @@ pub(crate) fn impl_subsystem_sender(
 			{
 				async fn send_message(&mut self, msg: OutgoingMessage)
 				{
-					self.channels.send_and_log_error(
+					self.send_message_with_priority::<NormalPriority>(msg).await;
+				}
+
+				async fn send_message_with_priority<P: Priority>(&mut self, msg: OutgoingMessage)
+				{
+					self.channels.send_and_log_error::<P>(
 						self.signals_received.load(),
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
-						)
+						),
 					).await;
 				}
 
 				fn try_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
 				{
-					self.channels.try_send(
+					self.try_send_message_with_priority::<NormalPriority>(msg)
+				}
+
+				fn try_send_message_with_priority<P: Priority>(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
+				{
+					self.channels.try_send::<P>(
 						self.signals_received.load(),
 						<#all_messages_wrapper as ::std::convert::From<_>> ::from (
 							<#outgoing_wrapper as ::std::convert::From<_>> :: from ( msg )
-						)
+						),
 					).map_err(|err| match err {
 								#support_crate ::metered::TrySendError::Full(inner) => #support_crate ::metered::TrySendError::Full(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),
 								#support_crate ::metered::TrySendError::Closed(inner) => #support_crate ::metered::TrySendError::Closed(inner.try_into().expect("we should be able to unwrap what we wrap, qed")),

@@ -40,6 +40,7 @@ mod kw {
 	syn::custom_keyword!(sends);
 	syn::custom_keyword!(message_capacity);
 	syn::custom_keyword!(signal_capacity);
+	syn::custom_keyword!(can_receive_priority_messages);
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +59,8 @@ pub(crate) enum SubSysAttrItem {
 	MessageChannelCapacity(ChannelCapacity<kw::message_capacity>),
 	/// Custom signal channels capacity for this subsystem
 	SignalChannelCapacity(ChannelCapacity<kw::signal_capacity>),
+	/// The subsystem can receive priority messages
+	CanReceivePriorityMessages(kw::can_receive_priority_messages),
 }
 
 impl Parse for SubSysAttrItem {
@@ -73,6 +76,8 @@ impl Parse for SubSysAttrItem {
 			Self::MessageChannelCapacity(input.parse::<ChannelCapacity<kw::message_capacity>>()?)
 		} else if lookahead.peek(kw::signal_capacity) {
 			Self::SignalChannelCapacity(input.parse::<ChannelCapacity<kw::signal_capacity>>()?)
+		} else if lookahead.peek(kw::can_receive_priority_messages) {
+			Self::CanReceivePriorityMessages(input.parse::<kw::can_receive_priority_messages>()?)
 		} else {
 			Self::Consumes(input.parse::<Consumes>()?)
 		})
@@ -99,6 +104,9 @@ impl ToTokens for SubSysAttrItem {
 			},
 			Self::SignalChannelCapacity(_) => {
 				quote! {}
+			},
+			Self::CanReceivePriorityMessages(can_receive_priority_messages) => {
+				quote! { #can_receive_priority_messages }
 			},
 		};
 		tokens.extend(ts.into_iter());
@@ -130,6 +138,8 @@ pub(crate) struct SubSysField {
 	pub(crate) message_capacity: Option<usize>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<usize>,
+	/// The subsystem can receive priority messages
+	pub(crate) can_receive_priority_messages: bool,
 
 	pub(crate) feature_gates: Option<CfgPredicate>,
 }
@@ -352,6 +362,8 @@ pub(crate) struct SubSystemAttrItems {
 	pub(crate) message_capacity: Option<ChannelCapacity<kw::message_capacity>>,
 	/// Custom signal channel capacity
 	pub(crate) signal_capacity: Option<ChannelCapacity<kw::signal_capacity>>,
+	/// The subsystem can receive priority messages
+	pub(crate) can_receive_priority_messages: bool,
 }
 
 impl Parse for SubSystemAttrItems {
@@ -393,8 +405,18 @@ impl Parse for SubSystemAttrItems {
 		let wip = extract_variant!(unique, Wip; default = false);
 		let message_capacity = extract_variant!(unique, MessageChannelCapacity take );
 		let signal_capacity = extract_variant!(unique, SignalChannelCapacity take );
+		let can_receive_priority_messages =
+			extract_variant!(unique, CanReceivePriorityMessages; default = false);
 
-		Ok(Self { blocking, wip, sends, consumes, message_capacity, signal_capacity })
+		Ok(Self {
+			blocking,
+			wip,
+			sends,
+			consumes,
+			message_capacity,
+			signal_capacity,
+			can_receive_priority_messages,
+		})
 	}
 }
 
@@ -486,6 +508,10 @@ impl<'a> SubsystemConfigSet<'a> {
 		default_capacity: usize,
 	) -> Vec<LitInt> {
 		signal_channel_capacities_without_wip(&self.enabled_subsystems, default_capacity)
+	}
+
+	pub(crate) fn can_receive_priority_messages_without_wip(&self) -> Vec<syn::LitBool> {
+		can_receive_priority_messages_without_wip(&self.enabled_subsystems)
 	}
 }
 
@@ -738,6 +764,7 @@ impl OrchestraGuts {
 					sends,
 					message_capacity,
 					signal_capacity,
+					can_receive_priority_messages,
 					..
 				} = subsystem_attrs;
 
@@ -761,6 +788,7 @@ impl OrchestraGuts {
 					message_capacity,
 					signal_capacity,
 					feature_gates,
+					can_receive_priority_messages,
 				});
 			} else {
 				// collect the "baggage"
@@ -891,5 +919,15 @@ pub(crate) fn consumes_without_wip<'a, T: Borrow<SubSysField>>(subsystems: &[T])
 		.map(|e| e.borrow())
 		.filter(|ssf| !ssf.wip)
 		.map(|ssf| ssf.message_to_consume())
+		.collect::<Vec<_>>()
+}
+
+pub(crate) fn can_receive_priority_messages_without_wip(
+	subsystems: &Vec<&SubSysField>,
+) -> Vec<syn::LitBool> {
+	subsystems
+		.iter()
+		.filter(|ssf| !ssf.wip)
+		.map(|ssf| syn::LitBool::new(ssf.can_receive_priority_messages, ssf.name.span()))
 		.collect::<Vec<_>>()
 }
