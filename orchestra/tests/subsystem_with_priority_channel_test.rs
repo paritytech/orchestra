@@ -61,9 +61,10 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgA>, OrchestraError> for SubA 
 				}
 				for i in self.priority {
 					match self.sending_method {
-						SendingMethod::Send => sender.priority_send_message(MsgB(i)).await,
+						SendingMethod::Send =>
+							sender.send_message_with_priority::<HighPriority>(MsgB(i)).await,
 						SendingMethod::TrySend =>
-							sender.try_priority_send_message(MsgB(i)).unwrap(),
+							sender.try_send_message_with_priority::<HighPriority>(MsgB(i)).unwrap(),
 					}
 				}
 
@@ -113,9 +114,10 @@ impl crate::Subsystem<OrchestraSubsystemContext<MsgB>, OrchestraError> for SubB 
 				}
 				for i in self.priority {
 					match self.sending_method {
-						SendingMethod::Send => sender.priority_send_message(MsgA(i)).await,
+						SendingMethod::Send =>
+							sender.send_message_with_priority::<HighPriority>(MsgA(i)).await,
 						SendingMethod::TrySend =>
-							sender.try_priority_send_message(MsgA(i)).unwrap(),
+							sender.try_send_message_with_priority::<HighPriority>(MsgA(i)).unwrap(),
 					}
 				}
 

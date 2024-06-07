@@ -494,6 +494,37 @@ where
 	fn start(self, ctx: Ctx) -> SpawnedSubsystem<E>;
 }
 
+/// Priority of messages sending to the individual subsystems.
+/// Only for the bounded channel sender.
+pub enum PriorityLevel {
+	/// Normal priority.
+	Normal,
+	/// High priority.
+	High,
+}
+/// Normal priority.
+pub struct NormalPriority;
+/// High priority.
+pub struct HighPriority;
+
+/// Describes the priority of the message.
+pub trait Priority {
+	/// The priority level.
+	fn priority() -> PriorityLevel {
+		PriorityLevel::Normal
+	}
+}
+impl Priority for NormalPriority {
+	fn priority() -> PriorityLevel {
+		PriorityLevel::Normal
+	}
+}
+impl Priority for HighPriority {
+	fn priority() -> PriorityLevel {
+		PriorityLevel::High
+	}
+}
+
 /// Sender end of a channel to interface with a subsystem.
 #[async_trait::async_trait]
 pub trait SubsystemSender<OutgoingMessage>: Clone + Send + 'static
@@ -503,8 +534,8 @@ where
 	/// Send a direct message to some other `Subsystem`, routed based on message type.
 	async fn send_message(&mut self, msg: OutgoingMessage);
 
-	/// Send a direct priority message to some other `Subsystem`, routed based on message type.
-	async fn priority_send_message(&mut self, msg: OutgoingMessage);
+	/// Send a direct message with defined priority to some other `Subsystem`, routed based on message type.
+	async fn send_message_with_priority<P: Priority>(&mut self, msg: OutgoingMessage);
 
 	/// Tries to send a direct message to some other `Subsystem`, routed based on message type.
 	/// This method is useful for cases where the message queue is bounded and the message is ok
@@ -515,10 +546,10 @@ where
 		msg: OutgoingMessage,
 	) -> Result<(), metered::TrySendError<OutgoingMessage>>;
 
-	/// Tries to send a direct priority message to some other `Subsystem`, routed based on message type.
-	/// This method is useful for cases with retry mechanisms. If the queue is full, this method will return an error.
+	/// Tries to send a direct message with defined priority to some other `Subsystem`, routed based on message type.
+	/// If the queue is full, this method will return an error.
 	/// This method is not async and will not block the current task.
-	fn try_priority_send_message(
+	fn try_send_message_with_priority<P: Priority>(
 		&mut self,
 		msg: OutgoingMessage,
 	) -> Result<(), metered::TrySendError<OutgoingMessage>>;

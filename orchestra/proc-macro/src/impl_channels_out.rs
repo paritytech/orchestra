@@ -73,34 +73,6 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 			)*
 		}
 
-		/// Priority of messages sending to the individual subsystems.
-		/// Only for the bounded channel sender.
-		pub enum PriorityLevel {
-			Normal,
-			High,
-		}
-
-		trait Priority {
-			fn priority() -> PriorityLevel {
-				PriorityLevel::Normal
-			}
-		}
-
-		struct NormalPriority;
-		struct HighPriority;
-
-		impl Priority for NormalPriority {
-			fn priority() -> PriorityLevel {
-				PriorityLevel::Normal
-			}
-		}
-
-		impl Priority for HighPriority {
-			fn priority() -> PriorityLevel {
-				PriorityLevel::High
-			}
-		}
-
 		#[allow(unreachable_code)]
 		// when no defined messages in enum
 		impl ChannelsOut {
