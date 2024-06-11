@@ -278,10 +278,10 @@ pub(crate) fn impl_subsystem_sender(
 			{
 				async fn send_message(&mut self, msg: OutgoingMessage)
 				{
-					self.send_message_with_priority::<NormalPriority>(msg).await;
+					self.send_message_with_priority::<#support_crate ::NormalPriority>(msg).await;
 				}
 
-				async fn send_message_with_priority<P: Priority>(&mut self, msg: OutgoingMessage)
+				async fn send_message_with_priority<P: #support_crate ::Priority>(&mut self, msg: OutgoingMessage)
 				{
 					self.channels.send_and_log_error::<P>(
 						self.signals_received.load(),
@@ -293,10 +293,10 @@ pub(crate) fn impl_subsystem_sender(
 
 				fn try_send_message(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
 				{
-					self.try_send_message_with_priority::<NormalPriority>(msg)
+					self.try_send_message_with_priority::<#support_crate ::NormalPriority>(msg)
 				}
 
-				fn try_send_message_with_priority<P: Priority>(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
+				fn try_send_message_with_priority<P: #support_crate ::Priority>(&mut self, msg: OutgoingMessage) -> ::std::result::Result<(), #support_crate ::metered::TrySendError<OutgoingMessage>>
 				{
 					self.channels.try_send::<P>(
 						self.signals_received.load(),
