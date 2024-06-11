@@ -77,7 +77,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 		// when no defined messages in enum
 		impl ChannelsOut {
 			/// Send a message via a bounded channel.
-			pub async fn send_and_log_error<P: Priority>(
+			pub async fn send_and_log_error<P: #support_crate ::Priority>(
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper
@@ -87,12 +87,12 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
 						match P::priority() {
-							PriorityLevel::Normal => {
+							#support_crate ::PriorityLevel::Normal => {
 								self. #channel_name .send(
 									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 								).await
 							},
-							PriorityLevel::High => {
+							#support_crate ::PriorityLevel::High => {
 								self. #channel_name .priority_send(
 									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 								).await
@@ -125,7 +125,7 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 			}
 
 			/// Try to send a message via a bounded channel.
-			pub fn try_send<P: Priority>(
+			pub fn try_send<P: #support_crate ::Priority>(
 				&mut self,
 				signals_received: usize,
 				message: #message_wrapper,
@@ -135,12 +135,12 @@ pub(crate) fn impl_channels_out_struct(info: &OrchestraInfo) -> Result<proc_macr
 					#feature_gates
 					#message_wrapper :: #consumes_variant ( inner ) => {
 						match P::priority() {
-							PriorityLevel::Normal => {
+							#support_crate ::PriorityLevel::Normal => {
 								self. #channel_name .try_send(
 									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 								)
 							},
-							PriorityLevel::High => {
+							#support_crate ::PriorityLevel::High => {
 								self. #channel_name .try_priority_send(
 									#support_crate ::make_packet(signals_received, #maybe_boxed_send)
 								)
