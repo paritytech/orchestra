@@ -15,7 +15,7 @@ futures = "0.3"
 async-trait = "0.1"
 thiserror = "1"
 metered = { package = "prioritized-metered-channel", version = "0.6.1", path = "../metered-channel", default-features = false }
-orchestra-proc-macro = { version = "0.3.8", path = "./proc-macro" }
+orchestra-proc-macro = { version = "0.4.0", path = "./proc-macro" }
 futures-timer = "3.0.2"
 pin-project = "1.0"
 dyn-clonable = "0.9"
