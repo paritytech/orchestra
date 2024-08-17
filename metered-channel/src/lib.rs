@@ -77,7 +77,7 @@ impl std::default::Default for Meter {
 /// A readout of sizes from the meter. Note that it is possible, due to asynchrony, for received
 /// to be slightly higher than sent.
 #[derive(Debug, Display, Clone, Default, PartialEq)]
-#[display(fmt = "(sent={} received={})", sent, received)]
+#[display("(sent={} received={})", sent, received)]
 pub struct Readout {
 	/// The amount of messages sent on the channel, in aggregate.
 	pub sent: usize,
