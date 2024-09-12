@@ -664,7 +664,7 @@ pub(crate) fn impl_feature_gated_items(
 							#channel_name: #channel_name_tx .clone(),
 						)*
 						#(
-							#channel_name_unbounded: #channel_name_unbounded_tx,
+							#channel_name_unbounded: #channel_name_unbounded_tx .clone(),
 						)*
 					};
 
@@ -703,6 +703,7 @@ pub(crate) fn impl_feature_gated_items(
 
 					let #subsystem_name: OrchestratedSubsystem< #consumes > =	spawn::<_,_, #blocking, _, _, _>(
 							&mut spawner,
+							#channel_name_unbounded_tx,
 							#channel_name_tx,
 							signal_tx,
 							unbounded_meter,
@@ -719,7 +720,7 @@ pub(crate) fn impl_feature_gated_items(
 
 				use #support_crate ::StreamExt;
 
-				let to_orchestra_rx = to_orchestra_rx.fuse();
+				let to_orchestra_rx = Some(to_orchestra_rx.fuse());
 				let orchestra = #orchestra_name {
 					#(
 						#subsystem_name,
@@ -785,6 +786,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 		#[allow(clippy::too_many_arguments)]
 		pub fn spawn<S, M, TK, Ctx, E, SubSys>(
 			spawner: &mut S,
+			unbounded_message_tx: #support_crate ::metered::UnboundedMeteredSender<MessagePacket<#maybe_boxed_message_generic>>,
 			message_tx: #support_crate ::metered::MeteredSender<MessagePacket<#maybe_boxed_message_generic>>,
 			signal_tx: #support_crate ::metered::MeteredSender< #signal >,
 			// meter for the unbounded channel
@@ -841,6 +843,7 @@ pub(crate) fn impl_task_kind(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 				},
 				tx_signal: signal_tx,
 				tx_bounded: message_tx,
+				tx_unbounded: unbounded_message_tx,
 				signals_received: 0,
 				name,
 			});
