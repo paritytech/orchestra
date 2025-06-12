@@ -174,13 +174,18 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 				Ok(())
 			}
 
-			/// Route a particular message to a subsystem that consumes the message.
-			pub async fn route_message<P: #support_crate ::Priority>(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+			/// Route a particular message with normal priority to a subsystem that consumes the message
+			pub async fn route_message(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+				self.route_message_with_priority::<#support_crate ::NormalPriority>(message, origin).await
+			}
+
+			/// Route a particular message with the specified priority to a subsystem that consumes the message.
+			pub async fn route_message_with_priority<P: #support_crate ::Priority>(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
 				match message {
 					#(
 						#feature_gates
 						#message_wrapper :: #consumes_variant ( inner ) =>
-							OrchestratedSubsystem::< #consumes >::send_message2::<P>(&mut self. #subsystem_name, inner, origin ).await?,
+							OrchestratedSubsystem::< #consumes >::send_message_with_priority::<P>(&mut self. #subsystem_name, inner, origin ).await?,
 					)*
 					// subsystems that are still work in progress
 					#(
@@ -258,10 +263,19 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 		}
 
 		impl<M> OrchestratedSubsystem<M> {
-			/// Send a message to the wrapped subsystem.
+
+			/// Send a message with normal priority to the wrapped subsystem.
 			///
 			/// If the inner `instance` is `None`, nothing is happening.
-			pub async fn send_message2<P: #support_crate ::Priority>(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+			pub async fn send_message2(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+				self.send_message_with_priority::<#support_crate ::NormalPriority>(message, origin).await
+			}
+
+
+			/// Send a message with specified priority to the wrapped subsystem.
+			///
+			/// If the inner `instance` is `None`, nothing is happening.
+			pub async fn send_message_with_priority<P: #support_crate ::Priority>(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
 				const MESSAGE_TIMEOUT: Duration = Duration::from_secs(10);
 
 				if let Some(ref mut instance) = self.instance {
