@@ -496,6 +496,8 @@ where
 
 /// Priority of messages sending to the individual subsystems.
 /// Only for the bounded channel sender.
+
+#[derive(Debug)]
 pub enum PriorityLevel {
 	/// Normal priority.
 	Normal,
