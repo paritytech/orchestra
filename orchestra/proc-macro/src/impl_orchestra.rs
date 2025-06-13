@@ -174,13 +174,18 @@ pub(crate) fn impl_orchestra_struct(info: &OrchestraInfo) -> proc_macro2::TokenS
 				Ok(())
 			}
 
-			/// Route a particular message to a subsystem that consumes the message.
+			/// Route a particular message with normal priority to a subsystem that consumes the message
 			pub async fn route_message(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+				self.route_message_with_priority::<#support_crate ::NormalPriority>(message, origin).await
+			}
+
+			/// Route a particular message with the specified priority to a subsystem that consumes the message.
+			pub async fn route_message_with_priority<P: #support_crate ::Priority>(&mut self, message: #message_wrapper, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
 				match message {
 					#(
 						#feature_gates
 						#message_wrapper :: #consumes_variant ( inner ) =>
-							OrchestratedSubsystem::< #consumes >::send_message2(&mut self. #subsystem_name, inner, origin ).await?,
+							OrchestratedSubsystem::< #consumes >::send_message_with_priority::<P>(&mut self. #subsystem_name, inner, origin ).await?,
 					)*
 					// subsystems that are still work in progress
 					#(
@@ -258,18 +263,37 @@ pub(crate) fn impl_orchestrated_subsystem(info: &OrchestraInfo) -> proc_macro2::
 		}
 
 		impl<M> OrchestratedSubsystem<M> {
-			/// Send a message to the wrapped subsystem.
+
+			/// Send a message with normal priority to the wrapped subsystem.
 			///
 			/// If the inner `instance` is `None`, nothing is happening.
 			pub async fn send_message2(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
+				self.send_message_with_priority::<#support_crate ::NormalPriority>(message, origin).await
+			}
+
+
+			/// Send a message with specified priority to the wrapped subsystem.
+			///
+			/// If the inner `instance` is `None`, nothing is happening.
+			pub async fn send_message_with_priority<P: #support_crate ::Priority>(&mut self, message: M, origin: &'static str) -> ::std::result::Result<(), #error_ty > {
 				const MESSAGE_TIMEOUT: Duration = Duration::from_secs(10);
 
 				if let Some(ref mut instance) = self.instance {
-					match instance.tx_bounded.send(MessagePacket {
-						signals_received: instance.signals_received,
-						message: #maybe_boxed_message,
-					}).timeout(MESSAGE_TIMEOUT).await
-					{
+					let send_result = match P::priority() {
+						#support_crate ::PriorityLevel::Normal => {
+							instance.tx_bounded.send(MessagePacket {
+								signals_received: instance.signals_received,
+								message: #maybe_boxed_message,
+							}).timeout(MESSAGE_TIMEOUT).await
+						},
+						#support_crate ::PriorityLevel::High => {
+							instance.tx_bounded.priority_send(MessagePacket {
+								signals_received: instance.signals_received,
+								message: #maybe_boxed_message,
+							}).timeout(MESSAGE_TIMEOUT).await
+						},
+					};
+					match send_result {
 						None => {
 							#support_crate ::tracing::error!(
 								target: LOG_TARGET,
