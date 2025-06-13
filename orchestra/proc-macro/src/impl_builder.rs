@@ -127,12 +127,6 @@ pub(crate) fn impl_builder(info: &OrchestraInfo) -> proc_macro2::TokenStream {
 			#[derive(Debug)]
 			pub struct Missing<T>(::core::marker::PhantomData<T>);
 
-			/// Trait used to mark fields status in a builder
-			trait OrchestraFieldState<T> {}
-
-			impl<T> OrchestraFieldState<T> for Init<T> {}
-			impl<T> OrchestraFieldState<T> for Missing<T> {}
-
 			impl<T> ::std::default::Default for Missing<T> {
 				fn default() -> Self {
 					Missing::<T>(::core::marker::PhantomData)
