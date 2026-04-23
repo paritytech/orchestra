@@ -28,7 +28,7 @@ futures = { version = "0.3", features = ["thread-pool"] }
 env_logger = "0.10.1"
 futures-time = "3.0.0"
 log = "0.4.20"
-rand = "0.8.5"
+rand = "0.8.6"
 
 [[example]]
 name = "duo"
